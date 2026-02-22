@@ -1,0 +1,260 @@
+# Cinematic Frame Admin – Backend Implementation Plan
+
+Node.js + Express.js + MySQL backend running on **port 5000**, powering every page of the admin panel.
+
+---
+
+## Admin Panel → Backend Mapping
+
+| Admin Page | Data Needed | DB Table |
+|---|---|---|
+| **Dashboard** | Total inquiries, revenue, active projects, recent quotations | Aggregates from `quotations`, `clients` |
+| **Quotations** | Lead list, status update, details panel | `quotations` |
+| **Portfolio** | Albums grid, categories, featured toggle, image upload | `portfolios` |
+| **Services** | Services list, packages, add/edit/delete | `services` |
+| **Clients** | Client CRM, search, project count, total spent | `clients` |
+| **Testimonials** | Reviews list, approve/reject | `testimonials` |
+| **Analytics** | Revenue chart data, monthly totals | Aggregates from `quotations` |
+| **Settings** | Admin profile, password change | `users` |
+
+---
+
+## Proposed Changes
+
+### Folder Structure
+
+```
+d:\Cinematic Admin\cinematic-backend\
+├── src/
+│   ├── config/
+│   │   └── database.js       ← Sequelize + MySQL connection
+│   ├── models/
+│   │   ├── User.js
+│   │   ├── Quotation.js
+│   │   ├── Portfolio.js
+│   │   ├── Service.js
+│   │   ├── Client.js
+│   │   └── Testimonial.js
+│   ├── controllers/
+│   │   ├── authController.js
+│   │   ├── dashboardController.js
+│   │   ├── quotationController.js
+│   │   ├── portfolioController.js
+│   │   ├── serviceController.js
+│   │   ├── clientController.js
+│   │   └── testimonialController.js
+│   ├── routes/
+│   │   ├── auth.js
+│   │   ├── dashboard.js
+│   │   ├── quotations.js
+│   │   ├── portfolio.js
+│   │   ├── services.js
+│   │   ├── clients.js
+│   │   └── testimonials.js
+│   ├── middleware/
+│   │   ├── authMiddleware.js  ← JWT verify
+│   │   ├── errorHandler.js
+│   │   └── upload.js          ← Multer for images
+│   └── utils/
+│       └── seeder.js          ← Seed admin user + sample data
+├── uploads/                   ← Stored portfolio images
+├── .env
+├── package.json
+└── server.js                  ← Entry point
+```
+
+---
+
+### [NEW] `.env`
+```
+PORT=5000
+DB_HOST=127.0.0.1
+DB_USER=root
+DB_PASSWORD=         ← fill your XAMPP MySQL password
+DB_NAME=pixcel_db
+JWT_SECRET=cinematic_secret_2026
+FRONTEND_URL=http://localhost:8080
+```
+
+### [NEW] `server.js`
+- Express app setup
+- CORS with `FRONTEND_URL` origin
+- Helmet, Morgan loggers
+- Static `/uploads` folder served
+- All route modules mounted under `/api`
+- Global error handler
+
+---
+
+### Database Models
+
+#### [NEW] `User.js`
+| Column | Type | Notes |
+|---|---|---|
+| id | INTEGER PK | Auto increment |
+| username | VARCHAR | |
+| email | VARCHAR | Unique |
+| password | VARCHAR | bcrypt hashed |
+| role | ENUM | `admin`, `manager` |
+
+#### [NEW] `Quotation.js`
+| Column | Type | Notes |
+|---|---|---|
+| id | INTEGER PK | |
+| name | VARCHAR | Client name |
+| email | VARCHAR | |
+| phone | VARCHAR | |
+| city | VARCHAR | |
+| eventType | VARCHAR | Wedding, Corporate… |
+| eventDate | DATE | |
+| venue | VARCHAR | |
+| guestCount | VARCHAR | |
+| servicesRequested | JSON | Array of strings |
+| budget | VARCHAR | |
+| requirements | TEXT | |
+| status | ENUM | `New`, `Contacted`, `Booked`, `Closed` |
+
+#### [NEW] `Portfolio.js`
+| Column | Type | Notes |
+|---|---|---|
+| id | INTEGER PK | |
+| title | VARCHAR | Album name |
+| category | ENUM | Wedding, Pre-Wedding, Corporate, Portraits, Events |
+| coverImage | VARCHAR | File path |
+| images | JSON | Array of file paths |
+| clientName | VARCHAR | |
+| eventDate | DATE | |
+| featured | BOOLEAN | Default false |
+| photoCount | INTEGER | |
+
+#### [NEW] `Service.js`
+| Column | Type | Notes |
+|---|---|---|
+| id | INTEGER PK | |
+| name | VARCHAR | |
+| description | TEXT | |
+| icon | VARCHAR | lucide icon name |
+| price | DECIMAL | |
+| duration | VARCHAR | e.g. "8-10 hrs" |
+| popular | BOOLEAN | |
+| features | JSON | Array of strings (for packages) |
+| packageName | VARCHAR | Silver / Gold / Platinum / null |
+
+#### [NEW] `Client.js`
+| Column | Type | Notes |
+|---|---|---|
+| id | INTEGER PK | |
+| name | VARCHAR | |
+| email | VARCHAR | Unique |
+| phone | VARCHAR | |
+| projectCount | INTEGER | Default 0 |
+| totalSpent | DECIMAL | Default 0 |
+| status | ENUM | `Active`, `Inactive` |
+
+#### [NEW] `Testimonial.js`
+| Column | Type | Notes |
+|---|---|---|
+| id | INTEGER PK | |
+| name | VARCHAR | |
+| event | VARCHAR | |
+| rating | INTEGER | 1-5 |
+| text | TEXT | |
+| approved | BOOLEAN | Default false |
+
+---
+
+### API Endpoints
+
+#### Auth
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| POST | `/api/auth/login` | Public | Login, returns JWT |
+| GET | `/api/auth/me` | 🔒 Admin | Get own profile |
+| PATCH | `/api/auth/change-password` | 🔒 Admin | Change password |
+
+#### Dashboard
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | `/api/dashboard/stats` | 🔒 Admin | Total inquiries, active projects, revenue, completed |
+| GET | `/api/dashboard/revenue-chart` | 🔒 Admin | Monthly revenue for chart |
+
+#### Quotations
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| POST | `/api/quotations` | Public | Submit from website form |
+| GET | `/api/quotations` | 🔒 Admin | All leads with filter |
+| GET | `/api/quotations/:id` | 🔒 Admin | Single lead details |
+| PATCH | `/api/quotations/:id/status` | 🔒 Admin | Update status |
+| DELETE | `/api/quotations/:id` | 🔒 Admin | Delete lead |
+
+#### Portfolio
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | `/api/portfolio` | Public | All albums (with ?category filter) |
+| GET | `/api/portfolio/:id` | Public | Single album + images |
+| POST | `/api/portfolio` | 🔒 Admin | Add album (FormData + images) |
+| PATCH | `/api/portfolio/:id` | 🔒 Admin | Edit album |
+| DELETE | `/api/portfolio/:id` | 🔒 Admin | Delete album |
+
+#### Services
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | `/api/services` | Public | All services |
+| POST | `/api/services` | 🔒 Admin | Add service |
+| PUT | `/api/services/:id` | 🔒 Admin | Edit service |
+| DELETE | `/api/services/:id` | 🔒 Admin | Delete service |
+
+#### Clients
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | `/api/clients` | 🔒 Admin | All clients (with search) |
+| POST | `/api/clients` | 🔒 Admin | Add client |
+| PUT | `/api/clients/:id` | 🔒 Admin | Edit client |
+| DELETE | `/api/clients/:id` | 🔒 Admin | Delete client |
+
+#### Testimonials
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | `/api/testimonials` | Public | Approved testimonials (for website) |
+| GET | `/api/testimonials/all` | 🔒 Admin | All incl. pending |
+| PATCH | `/api/testimonials/:id/approve` | 🔒 Admin | Approve |
+| PATCH | `/api/testimonials/:id/reject` | 🔒 Admin | Reject |
+| DELETE | `/api/testimonials/:id` | 🔒 Admin | Delete |
+
+---
+
+## npm Dependencies
+
+```bash
+npm install express mysql2 sequelize dotenv cors helmet morgan jsonwebtoken bcryptjs multer
+```
+
+---
+
+## Verification Plan
+
+### MySQL Setup (Before Starting)
+1. Open XAMPP → Start **Apache** + **MySQL**
+2. Go to `http://localhost/phpmyadmin`
+3. Click **New** → create database: `pixcel_db`
+
+### Automated – Run Server
+```bash
+cd "d:\Cinematic Admin\cinematic-backend"
+node server.js
+```
+Expected output: `✅ Server running on port 5000` + `✅ MySQL connected`
+
+### Manual API Tests (Postman)
+
+| # | Test | Method | URL | Expected |
+|---|---|---|---|---|
+| 1 | Admin Login | POST | `http://localhost:5000/api/auth/login` | `{ success: true, token: "..." }` |
+| 2 | Get Quotations | GET | `http://localhost:5000/api/quotations` (with Bearer token) | Array of leads |
+| 3 | Get Portfolio | GET | `http://localhost:5000/api/portfolio` | Array of albums |
+| 4 | Get Services | GET | `http://localhost:5000/api/services` | Array of services |
+| 5 | Get Dashboard Stats | GET | `http://localhost:5000/api/dashboard/stats` (with token) | Stats object |
+| 6 | Admin creds | - | email: `admin@pixcelstudio.com` / pw: `Admin@123` | Login passes |
+
+### Frontend Connectivity Test
+After backend starts, open admin panel (`npm run dev`) → Dashboard page should show real data (no hardcoded arrays).
