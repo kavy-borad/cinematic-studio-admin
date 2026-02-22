@@ -1,0 +1,104 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@400;500;600;700&display=swap');
+
+@layer base {
+  :root {
+    --background: 220 20% 7%;
+    --foreground: 220 10% 90%;
+
+    --card: 220 18% 10%;
+    --card-foreground: 220 10% 90%;
+
+    --popover: 220 18% 12%;
+    --popover-foreground: 220 10% 90%;
+
+    --primary: 40 85% 55%;
+    --primary-foreground: 220 20% 7%;
+
+    --secondary: 220 15% 15%;
+    --secondary-foreground: 220 10% 80%;
+
+    --muted: 220 15% 14%;
+    --muted-foreground: 220 10% 55%;
+
+    --accent: 220 15% 18%;
+    --accent-foreground: 220 10% 85%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 220 15% 16%;
+    --input: 220 15% 16%;
+    --ring: 40 85% 55%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 220 20% 5%;
+    --sidebar-foreground: 220 10% 70%;
+    --sidebar-primary: 40 85% 55%;
+    --sidebar-primary-foreground: 220 20% 7%;
+    --sidebar-accent: 220 15% 12%;
+    --sidebar-accent-foreground: 220 10% 90%;
+    --sidebar-border: 220 15% 12%;
+    --sidebar-ring: 40 85% 55%;
+
+    /* Custom tokens */
+    --gold: 40 85% 55%;
+    --gold-foreground: 220 20% 7%;
+    --gold-muted: 40 50% 30%;
+    --surface-hover: 220 15% 13%;
+    --success: 142 71% 45%;
+    --warning: 38 92% 50%;
+    --info: 217 91% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  h1, h2, h3 {
+    font-family: 'Playfair Display', serif;
+  }
+}
+
+@layer utilities {
+  .glass-card {
+    @apply bg-card/80 backdrop-blur-sm border border-border/50;
+  }
+
+  .gold-glow {
+    box-shadow: 0 0 20px hsl(40 85% 55% / 0.15);
+  }
+
+  .stat-card-hover {
+    @apply transition-all duration-300;
+  }
+
+  .stat-card-hover:hover {
+    @apply border-primary/30;
+    box-shadow: 0 4px 20px hsl(40 85% 55% / 0.1);
+    transform: translateY(-2px);
+  }
+
+  .sidebar-link {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200;
+  }
+
+  .sidebar-link:hover {
+    @apply bg-accent text-accent-foreground;
+  }
+
+  .sidebar-link.active {
+    @apply bg-primary/10 text-primary;
+  }
+}
