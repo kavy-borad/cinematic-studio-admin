@@ -17,6 +17,7 @@ require("./src/models/Service");
 require("./src/models/Client");
 require("./src/models/Testimonial");
 require("./src/models/Setting");
+require("./src/models/ApiLog");
 
 // Import routes
 const authRoutes = require("./src/routes/auth");
@@ -27,6 +28,8 @@ const serviceRoutes = require("./src/routes/services");
 const clientRoutes = require("./src/routes/clients");
 const testimonialRoutes = require("./src/routes/testimonials");
 const settingsRoutes = require("./src/routes/settings");
+const logsRoutes = require("./src/routes/logs");
+const apiLogger = require("./src/middleware/apiLogger");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -47,17 +50,26 @@ app.use(cors({
     },
     credentials: true,
 }));
-app.use(helmet({ crossOriginResourcePolicy: false }));
+app.use(helmet({ crossOriginResourcePolicy: false, contentSecurityPolicy: false }));
 app.use(morgan("dev"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(apiLogger); // API log capture middleware (must be after body parsers)
 
 // Serve uploaded images
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
+// Serve public static files
+app.use(express.static(path.join(__dirname, "public")));
+
 // ─── Routes ─────────────────────────────────────────────────────────────────
 app.get("/", (req, res) => {
     res.json({ success: true, message: "🎬 Cinematic Frame Backend API is running!" });
+});
+
+// Standalone Log Viewer Page
+app.get("/log-viewer", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "log-viewer.html"));
 });
 
 app.use("/api/auth", authRoutes);
@@ -68,6 +80,7 @@ app.use("/api/services", serviceRoutes);
 app.use("/api/clients", clientRoutes);
 app.use("/api/testimonials", testimonialRoutes);
 app.use("/api/settings", settingsRoutes);
+app.use("/api/logs", logsRoutes);
 // 404 catch-all
 app.use((req, res) => {
     res.status(404).json({ success: false, message: `Route ${req.method} ${req.originalUrl} not found.` });

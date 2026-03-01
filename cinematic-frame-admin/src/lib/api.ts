@@ -272,4 +272,27 @@ export async function getPublicSettings() {
     return res.data;
 }
 
+// ─── API Logs ─────────────────────────────────────────────────────────────────
+export async function getLogs(params?: {
+    page?: number;
+    limit?: number;
+    type?: string;
+    method?: string;
+    status?: string;
+    search?: string;
+}) {
+    const res = await api.get("/logs", { params });
+    return res.data;
+}
+
+export async function getLogStats() {
+    const res = await api.get("/logs/stats");
+    return res.data;
+}
+
+export async function clearAllLogs() {
+    const res = await api.delete("/logs");
+    return res.data;
+}
+
 export default api;

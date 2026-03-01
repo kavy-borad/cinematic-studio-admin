@@ -29,7 +29,7 @@ const Quotation = sequelize.define("Quotation", {
         allowNull: false,
     },
     eventDate: {
-        type: DataTypes.DATEONLY,
+        type: DataTypes.STRING,
         allowNull: true,
     },
     venue: {
@@ -44,6 +44,11 @@ const Quotation = sequelize.define("Quotation", {
         type: DataTypes.JSON,
         allowNull: true,
         defaultValue: [],
+    },
+    functions: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+        comment: "Event functions like Engagement, Pithi / Haldi, Reception",
     },
     budget: {
         type: DataTypes.STRING,
