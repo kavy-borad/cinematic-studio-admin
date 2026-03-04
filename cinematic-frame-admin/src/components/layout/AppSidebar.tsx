@@ -2,9 +2,10 @@ import { NavLink, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   LayoutDashboard, Image, FileText, DollarSign, Users,
-  Star, BarChart3, Settings, Camera, ChevronLeft, ChevronRight
+  Star, BarChart3, Settings, Camera, ChevronLeft, ChevronRight, LogOut, ShieldCheck
 } from "lucide-react";
 import { useSidebarStore } from "@/store/sidebar";
+import { useAuth } from "@/contexts/AuthContext";
 
 const links = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -14,12 +15,14 @@ const links = [
   { to: "/clients", icon: Users, label: "Clients" },
   { to: "/testimonials", icon: Star, label: "Testimonials" },
   { to: "/analytics", icon: BarChart3, label: "Analytics" },
+  { to: "/admins", icon: ShieldCheck, label: "Admins" },
   { to: "/settings", icon: Settings, label: "Settings" },
 ];
 
 export function AppSidebar() {
   const { collapsed, toggle } = useSidebarStore();
   const location = useLocation();
+  const { admin, logout } = useAuth();
 
   return (
     <motion.aside
@@ -58,6 +61,24 @@ export function AppSidebar() {
           );
         })}
       </nav>
+
+      {/* Admin Info & Logout */}
+      <div className="px-3 py-3 border-t border-sidebar-border">
+        {!collapsed && admin && (
+          <div className="mb-2 px-3 py-1.5">
+            <p className="text-xs font-medium text-foreground truncate">{admin.name}</p>
+            <p className="text-[10px] text-muted-foreground truncate">{admin.email}</p>
+          </div>
+        )}
+        <button
+          onClick={logout}
+          className="sidebar-link w-full text-red-400 hover:text-red-300 hover:bg-red-500/10"
+          title={collapsed ? "Logout" : undefined}
+        >
+          <LogOut className="h-5 w-5 flex-shrink-0" />
+          {!collapsed && <span>Logout</span>}
+        </button>
+      </div>
 
       {/* Collapse Toggle */}
       <button

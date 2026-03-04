@@ -7,18 +7,23 @@ exports.login = async (req, res) => {
     try {
         const { email, password } = req.body;
 
+        console.log(`\n🔐 [AUTH] Login attempt for email: ${email}`);
+
         if (!email || !password) {
+            console.log(`⚠️  [AUTH] Login failed - Missing email or password`);
             return res.status(400).json({ success: false, message: "Email and password are required." });
         }
 
         const user = await User.findOne({ where: { email } });
         if (!user) {
-            return res.status(401).json({ success: false, message: "Invalid email or password." });
+            console.log(`❌ [AUTH] Login failed - No user found with email: ${email}`);
+            return res.status(401).json({ success: false, message: "Invalid email or password" });
         }
 
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
-            return res.status(401).json({ success: false, message: "Invalid email or password." });
+            console.log(`❌ [AUTH] Login failed - Wrong password for: ${email}`);
+            return res.status(401).json({ success: false, message: "Invalid email or password" });
         }
 
         const token = jwt.sign(
@@ -27,17 +32,22 @@ exports.login = async (req, res) => {
             { expiresIn: "7d" }
         );
 
+        console.log(`✅ [AUTH] Login successful - Admin: ${user.username} (${user.email})`);
+
         res.json({
             success: true,
-            token,
-            user: {
-                id: user.id,
-                username: user.username,
-                email: user.email,
-                role: user.role,
+            message: "Login successful",
+            data: {
+                admin: {
+                    id: user.id,
+                    name: user.username,
+                    email: user.email,
+                },
+                token,
             },
         });
     } catch (error) {
+        console.error(`💥 [AUTH] Login error:`, error.message);
         res.status(500).json({ success: false, message: error.message });
     }
 };
@@ -105,6 +115,20 @@ exports.updateProfile = async (req, res) => {
             data: { id: user.id, username: user.username, email: user.email, role: user.role },
         });
     } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// POST /api/auth/logout
+exports.logout = (req, res) => {
+    try {
+        console.log(`\n🚪 [AUTH] Admin logged out: ${req.user.email}`);
+
+        // Since we use JWT stored in local storage, backend only needs to log it
+        // and return a success response. The client will delete the token.
+        res.json({ success: true, message: "Logged out successfully" });
+    } catch (error) {
+        console.error(`💥 [AUTH] Logout error:`, error.message);
         res.status(500).json({ success: false, message: error.message });
     }
 };

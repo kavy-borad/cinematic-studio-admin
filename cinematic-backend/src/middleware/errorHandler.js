@@ -19,8 +19,13 @@ const errorHandler = (err, req, res, next) => {
         return res.status(400).json({ success: false, message: "File too large. Maximum 10MB allowed." });
     }
 
-    // Multer unexpected field error
+    // Multer unexpected field name (field not in allowed list)
     if (err.code === "LIMIT_UNEXPECTED_FILE") {
+        return res.status(400).json({ success: false, message: `Unexpected file field: ${err.field}. Use 'coverImage' or 'images'.` });
+    }
+
+    // Multer file count exceeded
+    if (err.code === "LIMIT_FILE_COUNT") {
         return res.status(400).json({ success: false, message: "Too many files uploaded." });
     }
 

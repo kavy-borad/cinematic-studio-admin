@@ -40,6 +40,7 @@ export default function Dashboard() {
   const [statsData, setStatsData] = useState<any>(null);
   const [revenueData, setRevenueData] = useState<any[]>([]);
   const [recentQuotations, setRecentQuotations] = useState<any[]>([]);
+  const [upcomingShoots, setUpcomingShoots] = useState<any[]>([]);
 
   useEffect(() => {
     async function fetchData() {
@@ -52,6 +53,7 @@ export default function Dashboard() {
         if (statsRes.success) {
           setStatsData(statsRes.data);
           setRecentQuotations(statsRes.data.recentQuotations || []);
+          setUpcomingShoots(statsRes.data.upcomingShoots || []);
         }
         if (chartRes.success) {
           setRevenueData(chartRes.data.map((d: any) => ({
@@ -85,10 +87,6 @@ export default function Dashboard() {
     { label: "Completed Projects", value: statsData?.completedProjects ?? 0 },
     { label: "Revenue", value: `₹${(statsData?.totalRevenue ?? 0).toLocaleString("en-IN")}` },
   ];
-
-  const upcomingShoots = recentQuotations
-    .filter((q: any) => q.status === "Booked")
-    .slice(0, 3);
 
   return (
     <>

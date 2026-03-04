@@ -29,6 +29,7 @@ const clientRoutes = require("./src/routes/clients");
 const testimonialRoutes = require("./src/routes/testimonials");
 const settingsRoutes = require("./src/routes/settings");
 const logsRoutes = require("./src/routes/logs");
+const adminsRoutes = require("./src/routes/admins");
 const apiLogger = require("./src/middleware/apiLogger");
 
 const app = express();
@@ -81,6 +82,7 @@ app.use("/api/clients", clientRoutes);
 app.use("/api/testimonials", testimonialRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/logs", logsRoutes);
+app.use("/api/admins", adminsRoutes);
 // 404 catch-all
 app.use((req, res) => {
     res.status(404).json({ success: false, message: `Route ${req.method} ${req.originalUrl} not found.` });

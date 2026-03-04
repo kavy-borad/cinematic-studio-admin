@@ -20,6 +20,17 @@ exports.getStats = async (req, res) => {
             limit: 5,
         });
 
+        // Upcoming Shoots - Booked quotations with future eventDate
+        const today = new Date().toISOString().split("T")[0]; // "YYYY-MM-DD"
+        const upcomingShoots = await Quotation.findAll({
+            where: {
+                status: "Booked",
+                eventDate: { [Op.gte]: today },
+            },
+            order: [["eventDate", "ASC"]],
+            limit: 5,
+        });
+
         res.json({
             success: true,
             data: {
@@ -29,6 +40,7 @@ exports.getStats = async (req, res) => {
                 totalClients,
                 totalRevenue,
                 recentQuotations,
+                upcomingShoots,
             },
         });
     } catch (error) {

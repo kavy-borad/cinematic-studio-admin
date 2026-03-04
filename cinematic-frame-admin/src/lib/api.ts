@@ -37,9 +37,50 @@ export interface LoginPayload {
     password: string;
 }
 
+export interface AdminUser {
+    id: number;
+    name: string;
+    email: string;
+}
+
 export async function loginAdmin(payload: LoginPayload) {
     const res = await api.post("/auth/login", payload);
+    const { data } = res.data; // { admin, token }
+
+    // Store token and admin info in localStorage
+    if (data?.token) {
+        localStorage.setItem("admin_token", data.token);
+    }
+    if (data?.admin) {
+        localStorage.setItem("admin_user", JSON.stringify(data.admin));
+    }
+
     return res.data;
+}
+
+export async function logoutAdmin() {
+    try {
+        await api.post("/auth/logout");
+    } catch (error) {
+        // Ignore errors (e.g., if token is already expired)
+        console.warn("Logout API call failed, but clearing local session anyway.");
+    } finally {
+        localStorage.removeItem("admin_token");
+        localStorage.removeItem("admin_user");
+        window.location.href = "/login";
+    }
+}
+
+export function getStoredAdmin(): AdminUser | null {
+    const stored = localStorage.getItem("admin_user");
+    if (stored) {
+        try { return JSON.parse(stored); } catch { return null; }
+    }
+    return null;
+}
+
+export function isAuthenticated(): boolean {
+    return !!localStorage.getItem("admin_token");
 }
 
 export async function getMe() {
@@ -54,6 +95,35 @@ export async function changePassword(currentPassword: string, newPassword: strin
 
 export async function updateProfile(data: { username?: string; email?: string }) {
     const res = await api.patch("/auth/profile", data);
+    return res.data;
+}
+
+// ─── Admin Management ─────────────────────────────────────────────────────────
+export interface AdminData {
+    id: number;
+    name: string;
+    email: string;
+    createdAt: string;
+}
+
+export async function getAdmins(): Promise<{ success: boolean; message: string; data: AdminData[] }> {
+    const res = await api.get("/admins");
+    return res.data;
+}
+
+export interface CreateAdminPayload {
+    name: string;
+    email: string;
+    password: string;
+}
+
+export async function createAdminUser(payload: CreateAdminPayload) {
+    const res = await api.post("/admins/create", payload);
+    return res.data;
+}
+
+export async function deleteAdminUser(id: number) {
+    const res = await api.delete(`/admins/${id}`);
     return res.data;
 }
 
