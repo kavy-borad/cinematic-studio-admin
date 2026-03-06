@@ -10,9 +10,18 @@ exports.getStats = async (req, res) => {
         const completedProjects = await Quotation.count({ where: { status: "Closed" } });
         const totalClients = await Client.count();
 
-        // Sum totalSpent from clients table for revenue
-        const revenueResult = await Client.sum("totalSpent");
-        const totalRevenue = revenueResult || 0;
+        // Revenue: sum budgets of only "Closed" (completed) quotations — fully dynamic
+        const closedQuotations = await Quotation.findAll({
+            where: { status: "Closed" },
+            attributes: ["budget"],
+            raw: true,
+        });
+        const totalRevenue = closedQuotations.reduce((sum, q) => {
+            if (!q.budget) return sum;
+            const clean = q.budget.replace(/,/g, "");   // remove commas: "50,000" → "50000"
+            const match = clean.match(/\d+/);             // grab first number from string
+            return sum + (match ? parseInt(match[0], 10) : 0);
+        }, 0);
 
         // Recent 5 quotations
         const recentQuotations = await Quotation.findAll({

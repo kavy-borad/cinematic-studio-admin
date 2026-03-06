@@ -177,8 +177,33 @@ export async function updateQuotationStatus(id: number, status: string) {
     return res.data;
 }
 
+export async function updateQuotation(id: number, data: any) {
+    const res = await api.put(`/quotations/${id}`, data);
+    return res.data;
+}
+
 export async function deleteQuotation(id: number) {
     const res = await api.delete(`/quotations/${id}`);
+    return res.data;
+}
+
+export async function getUnreadQuotationCount() {
+    const res = await api.get("/quotations/unread-count");
+    return res.data;
+}
+
+export async function getUnreadQuotations() {
+    const res = await api.get("/quotations/unread");
+    return res.data;
+}
+
+export async function markQuotationAsRead(id: number) {
+    const res = await api.patch(`/quotations/${id}/read`);
+    return res.data;
+}
+
+export async function markAllQuotationsAsRead() {
+    const res = await api.patch("/quotations/mark-all-read");
     return res.data;
 }
 
@@ -201,7 +226,7 @@ export async function addPortfolioItem(formData: FormData) {
 }
 
 export async function updatePortfolioItem(id: number, formData: FormData) {
-    const res = await api.patch(`/portfolio/${id}`, formData, {
+    const res = await api.put(`/portfolio/${id}`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
     });
     return res.data;
@@ -228,22 +253,19 @@ export async function getService(id: number) {
     return res.data;
 }
 
-export async function addService(data: {
-    name: string;
-    description?: string;
-    icon?: string;
-    price: number;
-    duration?: string;
-    popular?: boolean;
-    features?: string[];
-    packageName?: string;
-}) {
-    const res = await api.post("/services", data);
+// POST /api/services – multipart/form-data (thumbnail file upload)
+export async function addService(formData: FormData) {
+    const res = await api.post("/services", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+    });
     return res.data;
 }
 
-export async function updateService(id: number, data: object) {
-    const res = await api.put(`/services/${id}`, data);
+// PUT /api/services/:id – multipart/form-data
+export async function updateService(id: number, formData: FormData) {
+    const res = await api.put(`/services/${id}`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+    });
     return res.data;
 }
 

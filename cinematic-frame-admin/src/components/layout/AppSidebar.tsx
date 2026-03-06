@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { useSidebarStore } from "@/store/sidebar";
 import { useAuth } from "@/contexts/AuthContext";
+import { useNotificationStore } from "@/store/notifications";
 
 const links = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -23,15 +24,16 @@ export function AppSidebar() {
   const { collapsed, toggle } = useSidebarStore();
   const location = useLocation();
   const { admin, logout } = useAuth();
+  const unreadCount = useNotificationStore((s) => s.unreadCount);
 
   return (
     <motion.aside
-      animate={{ width: collapsed ? 72 : 240 }}
+      animate={{ width: collapsed ? 72 : 210 }}
       transition={{ duration: 0.3, ease: "easeInOut" }}
       className="fixed left-0 top-0 h-screen bg-sidebar border-r border-sidebar-border z-40 flex flex-col"
     >
       {/* Logo */}
-      <div className="h-16 flex items-center px-4 border-b border-sidebar-border">
+      <div className="h-16 flex items-center px-3 border-b border-sidebar-border">
         <Camera className="h-7 w-7 text-primary flex-shrink-0" />
         {!collapsed && (
           <motion.span
@@ -48,6 +50,7 @@ export function AppSidebar() {
       <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
         {links.map((link) => {
           const isActive = location.pathname === link.to;
+          const showBadge = link.to === "/quotations" && unreadCount > 0;
           return (
             <NavLink
               key={link.to}
@@ -55,38 +58,51 @@ export function AppSidebar() {
               className={`sidebar-link ${isActive ? "active" : "text-sidebar-foreground"}`}
               title={collapsed ? link.label : undefined}
             >
-              <link.icon className="h-5 w-5 flex-shrink-0" />
-              {!collapsed && <span>{link.label}</span>}
+              <div className="relative">
+                <link.icon className="h-5 w-5 flex-shrink-0" />
+                {showBadge && collapsed && (
+                  <span className="absolute -top-1.5 -right-1.5 h-4 w-4 bg-red-500 rounded-full flex items-center justify-center text-[8px] font-bold text-white animate-pulse">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                )}
+              </div>
+              {!collapsed && (
+                <div className="flex items-center justify-between flex-1">
+                  <span>{link.label}</span>
+                  {showBadge && (
+                    <span className="h-5 min-w-[20px] px-1.5 bg-red-500 rounded-full flex items-center justify-center text-[10px] font-bold text-white animate-pulse">
+                      {unreadCount > 9 ? "9+" : unreadCount}
+                    </span>
+                  )}
+                </div>
+              )}
             </NavLink>
           );
         })}
       </nav>
 
-      {/* Admin Info & Logout */}
-      <div className="px-3 py-3 border-t border-sidebar-border">
-        {!collapsed && admin && (
-          <div className="mb-2 px-3 py-1.5">
-            <p className="text-xs font-medium text-foreground truncate">{admin.name}</p>
-            <p className="text-[10px] text-muted-foreground truncate">{admin.email}</p>
-          </div>
-        )}
+      {/* Bottom Actions */}
+      <div className="mt-auto border-t border-sidebar-border flex flex-col">
+        <div className="p-3">
+          <button
+            onClick={logout}
+            className="sidebar-link w-full text-red-500 hover:text-red-400 hover:bg-red-500/10 transition-all"
+            title={collapsed ? "Logout" : undefined}
+          >
+            <LogOut className="h-5 w-5 flex-shrink-0" />
+            {!collapsed && <span className="font-semibold tracking-wide text-sm">Logout</span>}
+          </button>
+        </div>
+
+        {/* Collapse Toggle */}
         <button
-          onClick={logout}
-          className="sidebar-link w-full text-red-400 hover:text-red-300 hover:bg-red-500/10"
-          title={collapsed ? "Logout" : undefined}
+          onClick={toggle}
+          className="h-12 flex items-center justify-center border-t border-sidebar-border text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/30 transition-colors w-full"
+          title={collapsed ? "Expand Sidebar" : "Collapse Sidebar"}
         >
-          <LogOut className="h-5 w-5 flex-shrink-0" />
-          {!collapsed && <span>Logout</span>}
+          {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
         </button>
       </div>
-
-      {/* Collapse Toggle */}
-      <button
-        onClick={toggle}
-        className="h-12 flex items-center justify-center border-t border-sidebar-border text-muted-foreground hover:text-foreground transition-colors"
-      >
-        {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-      </button>
     </motion.aside>
   );
 }

@@ -62,6 +62,11 @@ const Quotation = sequelize.define("Quotation", {
         type: DataTypes.ENUM("New", "Contacted", "Booked", "Closed"),
         defaultValue: "New",
     },
+    isRead: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+        comment: "Whether admin has seen this quotation",
+    },
 });
 
 module.exports = Quotation;

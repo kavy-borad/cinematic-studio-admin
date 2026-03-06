@@ -21,7 +21,7 @@ router.get("/:id", getPortfolio);                              // GET by id
 
 // ── Admin Routes (auth protected) ────────────────────────────────────────────
 router.post("/", auth, portfolioUpload, createPortfolio);      // POST – Add new portfolio
-router.patch("/:id", auth, portfolioUpload, updatePortfolio);  // PATCH – Update portfolio
+router.put("/:id", auth, portfolioUpload, updatePortfolio);    // PUT – Update portfolio
 router.delete("/:id/image", auth, removeImage);                // DELETE – Remove single image
 router.delete("/:id", auth, deletePortfolio);                  // DELETE – Delete portfolio
 

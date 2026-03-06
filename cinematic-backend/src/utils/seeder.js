@@ -70,21 +70,6 @@ async function seedDatabase() {
             console.log("✅ Services seeded");
         }
 
-        // ── Clients ─────────────────────────────────────────────────
-        const cCount = await Client.count();
-        if (cCount === 0) {
-            await Client.bulkCreate([
-                { name: "Priya Sharma", email: "priya@email.com", phone: "+91 98765 43210", projectCount: 3, totalSpent: 450000, status: "Active" },
-                { name: "Rahul Verma", email: "rahul@email.com", phone: "+91 87654 32109", projectCount: 1, totalSpent: 45000, status: "Active" },
-                { name: "Anita Desai", email: "anita@email.com", phone: "+91 76543 21098", projectCount: 2, totalSpent: 160000, status: "Active" },
-                { name: "Vikram Singh", email: "vikram@email.com", phone: "+91 65432 10987", projectCount: 4, totalSpent: 600000, status: "Active" },
-                { name: "Meera Joshi", email: "meera@email.com", phone: "+91 54321 09876", projectCount: 1, totalSpent: 30000, status: "Inactive" },
-                { name: "Arjun Reddy", email: "arjun@email.com", phone: "+91 43210 98765", projectCount: 2, totalSpent: 120000, status: "Active" },
-                { name: "Kavita Nair", email: "kavita@email.com", phone: "+91 32109 87654", projectCount: 1, totalSpent: 75000, status: "Active" },
-                { name: "Deepak Patel", email: "deepak@email.com", phone: "+91 21098 76543", projectCount: 3, totalSpent: 280000, status: "Active" },
-            ]);
-            console.log("✅ Clients seeded");
-        }
 
         // ── Testimonials ────────────────────────────────────────────
         const tCount = await Testimonial.count();

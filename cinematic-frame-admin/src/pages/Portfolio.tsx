@@ -25,16 +25,22 @@ import {
   ImagePlus,
   X,
   FolderOpen,
+  Save,
 } from "lucide-react";
 import { motion } from "framer-motion";
-import { getPortfolio, addPortfolioItem, deletePortfolioItem } from "@/lib/api";
+import {
+  getPortfolio,
+  addPortfolioItem,
+  updatePortfolioItem,
+  removePortfolioImage,
+  deletePortfolioItem,
+} from "@/lib/api";
 import { toast } from "sonner";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 const API_URL =
   import.meta.env.VITE_API_URL?.replace("/api", "") || "http://localhost:5000";
 
-// Dynamic categories – admin can pass any of these (all lowercase sent to backend)
 const CATEGORIES = [
   "All",
   "Weddings",
@@ -70,7 +76,14 @@ const defaultForm = {
   clientName: "",
   eventDate: "",
   description: "",
+  featured: false,
 };
+
+// ─── Helper: resolve image src (local uploads vs. full URL) ─────────────────
+function resolveImg(url: string | null | undefined) {
+  if (!url) return null;
+  return url.startsWith("http") ? url : `${API_URL}${url}`;
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function Portfolio() {
@@ -78,22 +91,36 @@ export default function Portfolio() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("All");
 
-  // Dialog state
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState(defaultForm);
+  // ── Add dialog state ──────────────────────────────────────────────────────
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [addSubmitting, setAddSubmitting] = useState(false);
+  const [addForm, setAddForm] = useState(defaultForm);
+  const [addCoverFile, setAddCoverFile] = useState<File | null>(null);
+  const [addCoverPreview, setAddCoverPreview] = useState<string | null>(null);
+  const [addGalleryFiles, setAddGalleryFiles] = useState<File[]>([]);
+  const [addGalleryPreviews, setAddGalleryPreviews] = useState<string[]>([]);
+  const addCoverRef = useRef<HTMLInputElement>(null);
+  const addGalleryRef = useRef<HTMLInputElement>(null);
 
-  // File previews
-  const [coverFile, setCoverFile] = useState<File | null>(null);
-  const [coverPreview, setCoverPreview] = useState<string | null>(null);
-  const [galleryFiles, setGalleryFiles] = useState<File[]>([]);
-  const [galleryPreviews, setGalleryPreviews] = useState<string[]>([]);
+  // ── Edit dialog state ─────────────────────────────────────────────────────
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [editingAlbum, setEditingAlbum] = useState<any | null>(null);
+  const [editForm, setEditForm] = useState(defaultForm);
+  const [deletingImageUrl, setDeletingImageUrl] = useState<string | null>(null); // tracks which image is being deleted
 
-  // Refs
-  const coverInputRef = useRef<HTMLInputElement>(null);
-  const galleryInputRef = useRef<HTMLInputElement>(null);
+  // New cover file for edit (null = keep existing)
+  const [editCoverFile, setEditCoverFile] = useState<File | null>(null);
+  const [editCoverPreview, setEditCoverPreview] = useState<string | null>(null);
 
-  // ─── Fetch Portfolio ───────────────────────────────────────────────────────
+  // New gallery images to APPEND (previously saved images shown separately)
+  const [editNewGalleryFiles, setEditNewGalleryFiles] = useState<File[]>([]);
+  const [editNewGalleryPreviews, setEditNewGalleryPreviews] = useState<string[]>([]);
+
+  const editCoverRef = useRef<HTMLInputElement>(null);
+  const editGalleryRef = useRef<HTMLInputElement>(null);
+
+  // ─── Fetch Portfolio ────────────────────────────────────────────────────────
   const fetchPortfolio = async (category?: string) => {
     setLoading(true);
     try {
@@ -111,94 +138,206 @@ export default function Portfolio() {
     fetchPortfolio(activeTab);
   }, [activeTab]);
 
-  // ─── Cover Image Handler ───────────────────────────────────────────────────
-  const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // ════════════════════════════════════════════════════════
+  // ADD DIALOG HANDLERS
+  // ════════════════════════════════════════════════════════
+
+  const resetAddDialog = () => {
+    setAddForm(defaultForm);
+    setAddCoverFile(null);
+    setAddCoverPreview(null);
+    setAddGalleryFiles([]);
+    setAddGalleryPreviews([]);
+    if (addCoverRef.current) addCoverRef.current.value = "";
+    if (addGalleryRef.current) addGalleryRef.current.value = "";
+  };
+
+  const openAddDialog = () => {
+    resetAddDialog();
+    setAddDialogOpen(true);
+  };
+
+  const handleAddCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setCoverFile(file);
-    const url = URL.createObjectURL(file);
-    setCoverPreview(url);
+    setAddCoverFile(file);
+    setAddCoverPreview(URL.createObjectURL(file));
   };
 
-  // ─── Gallery Images Handler ────────────────────────────────────────────────
-  const handleGalleryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAddGalleryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
-    setGalleryFiles((prev) => [...prev, ...files]);
-    const previews = files.map((f) => URL.createObjectURL(f));
-    setGalleryPreviews((prev) => [...prev, ...previews]);
-    // Reset input so same files can be re-added after removal
-    if (galleryInputRef.current) galleryInputRef.current.value = "";
+    setAddGalleryFiles((prev) => [...prev, ...files]);
+    setAddGalleryPreviews((prev) => [
+      ...prev,
+      ...files.map((f) => URL.createObjectURL(f)),
+    ]);
+    if (addGalleryRef.current) addGalleryRef.current.value = "";
   };
 
-  const removeGalleryImage = (idx: number) => {
-    setGalleryFiles((prev) => prev.filter((_, i) => i !== idx));
-    setGalleryPreviews((prev) => prev.filter((_, i) => i !== idx));
+  const removeAddGallery = (idx: number) => {
+    setAddGalleryFiles((prev) => prev.filter((_, i) => i !== idx));
+    setAddGalleryPreviews((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  // ─── Reset Dialog ─────────────────────────────────────────────────────────
-  const resetDialog = () => {
-    setForm(defaultForm);
-    setCoverFile(null);
-    setCoverPreview(null);
-    setGalleryFiles([]);
-    setGalleryPreviews([]);
-    if (coverInputRef.current) coverInputRef.current.value = "";
-    if (galleryInputRef.current) galleryInputRef.current.value = "";
-  };
+  const handleAddSubmit = async () => {
+    if (!addForm.title.trim()) return toast.error("Title is required!");
+    if (!addForm.category) return toast.error("Please select a category!");
+    if (!addCoverFile) return toast.error("Please upload a cover photo!");
 
-  const openDialog = () => {
-    resetDialog();
-    setDialogOpen(true);
-  };
+    const fd = new FormData();
+    fd.append("title", addForm.title.trim());
+    if (addForm.slug.trim()) fd.append("slug", addForm.slug.trim());
+    fd.append("category", addForm.category);
+    if (addForm.clientName.trim()) fd.append("clientName", addForm.clientName.trim());
+    if (addForm.eventDate) fd.append("eventDate", addForm.eventDate);
+    if (addForm.description.trim()) fd.append("description", addForm.description.trim());
+    fd.append("featured", String(addForm.featured));
+    fd.append("coverImage", addCoverFile);
+    addGalleryFiles.forEach((f) => fd.append("images", f));
 
-  // ─── Submit: POST /api/portfolio ──────────────────────────────────────────
-  const handleSubmit = async () => {
-    if (!form.title.trim()) {
-      toast.error("Title required hai!");
-      return;
-    }
-    if (!form.category) {
-      toast.error("Category select karo!");
-      return;
-    }
-    if (!coverFile) {
-      toast.error("Cover photo upload karo!");
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append("title", form.title.trim());
-    if (form.slug.trim()) formData.append("slug", form.slug.trim());
-    formData.append("category", form.category);
-    if (form.clientName.trim()) formData.append("clientName", form.clientName.trim());
-    if (form.eventDate) formData.append("eventDate", form.eventDate);
-    if (form.description.trim()) formData.append("description", form.description.trim());
-
-    // ── Files ──────────────────────────────────────────────────────────────
-    formData.append("coverImage", coverFile);                    // single cover
-    galleryFiles.forEach((f) => formData.append("images", f));  // gallery photos
-
-    setSubmitting(true);
+    setAddSubmitting(true);
     try {
-      const res = await addPortfolioItem(formData);
+      const res = await addPortfolioItem(fd);
       if (res.success) {
         toast.success(res.message || "Portfolio added successfully!");
-        setDialogOpen(false);
+        setAddDialogOpen(false);
         fetchPortfolio(activeTab);
       }
     } catch (error: any) {
+      toast.error(error.response?.data?.message || "Error adding portfolio item!");
+    } finally {
+      setAddSubmitting(false);
+    }
+  };
+
+  // ════════════════════════════════════════════════════════
+  // EDIT DIALOG HANDLERS
+  // ════════════════════════════════════════════════════════
+
+  const openEditDialog = (album: any) => {
+    setEditingAlbum(album);
+    setEditForm({
+      title: album.title || "",
+      slug: album.slug || "",
+      category: album.category || "Weddings",
+      clientName: album.clientName || "",
+      eventDate: album.eventDate || "",
+      description: album.description || "",
+      featured: album.featured || false,
+    });
+    // Reset new-file states
+    setEditCoverFile(null);
+    setEditCoverPreview(null);
+    setEditNewGalleryFiles([]);
+    setEditNewGalleryPreviews([]);
+    if (editCoverRef.current) editCoverRef.current.value = "";
+    if (editGalleryRef.current) editGalleryRef.current.value = "";
+    setEditDialogOpen(true);
+  };
+
+  const handleEditCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setEditCoverFile(file);
+    setEditCoverPreview(URL.createObjectURL(file));
+  };
+
+  const handleEditGalleryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setEditNewGalleryFiles((prev) => [...prev, ...files]);
+    setEditNewGalleryPreviews((prev) => [
+      ...prev,
+      ...files.map((f) => URL.createObjectURL(f)),
+    ]);
+    if (editGalleryRef.current) editGalleryRef.current.value = "";
+  };
+
+  const removeEditNewGallery = (idx: number) => {
+    setEditNewGalleryFiles((prev) => prev.filter((_, i) => i !== idx));
+    setEditNewGalleryPreviews((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  // ── DELETE /api/portfolio/:id/image ──────────────────────────────────────
+  const handleRemoveExistingImage = async (imageUrl: string) => {
+    if (!editingAlbum) return;
+    if (!confirm("Are you sure you want to delete this image?")) return;
+
+    setDeletingImageUrl(imageUrl);
+    try {
+      const res = await removePortfolioImage(editingAlbum.id, imageUrl);
+      // Backend returns { message, portfolio: { id, images[] } }
+      const updatedImages: string[] = res.portfolio?.images ?? [];
+
+      toast.success(res.message || "Image deleted successfully!");
+
+      // Update the editingAlbum so the gallery strip re-renders immediately
+      setEditingAlbum((prev: any) => ({ ...prev, images: updatedImages }));
+
+      // Also update the main albums list card (photo count badge)
+      setAlbums((prev: any[]) =>
+        prev.map((a) =>
+          a.id === editingAlbum.id
+            ? { ...a, images: updatedImages, photoCount: updatedImages.length }
+            : a
+        )
+      );
+    } catch (error: any) {
       toast.error(
-        error.response?.data?.message || "Portfolio add karne mein error aaya!"
+        error.response?.data?.message || "Error deleting image!"
       );
     } finally {
-      setSubmitting(false);
+      setDeletingImageUrl(null);
+    }
+  };
+
+  // ── PUT /api/portfolio/:id ─────────────────────────────────────────────────
+  const handleEditSubmit = async () => {
+    if (!editingAlbum) return;
+    if (!editForm.title.trim()) return toast.error("Title is required!");
+    if (!editForm.category) return toast.error("Please select a category!");
+
+    const fd = new FormData();
+
+    // Append only changed / provided fields
+    fd.append("title", editForm.title.trim());
+    fd.append("slug", editForm.slug.trim());
+    fd.append("category", editForm.category);
+    fd.append("clientName", editForm.clientName.trim());
+    if (editForm.eventDate) fd.append("eventDate", editForm.eventDate);
+    fd.append("description", editForm.description.trim());
+    fd.append("featured", String(editForm.featured));
+
+    // New cover (if selected)
+    if (editCoverFile) fd.append("coverImage", editCoverFile);
+
+    // New gallery images to APPEND
+    editNewGalleryFiles.forEach((f) => fd.append("images", f));
+
+    setEditSubmitting(true);
+    try {
+      const res = await updatePortfolioItem(editingAlbum.id, fd);
+      // Backend returns { message, portfolio }
+      const updated = res.portfolio ?? res.data;
+      toast.success(res.message || "Portfolio updated successfully!");
+      setEditDialogOpen(false);
+      // Optimistically update local state
+      setAlbums((prev) =>
+        prev.map((a) => (a.id === editingAlbum.id ? { ...a, ...updated } : a))
+      );
+    } catch (error: any) {
+      toast.error(
+        error.response?.data?.message || "Error updating portfolio item!"
+      );
+    } finally {
+      setEditSubmitting(false);
     }
   };
 
   // ─── Delete ───────────────────────────────────────────────────────────────
   const handleDelete = async (id: number) => {
-    if (!confirm("Kya aap is portfolio item ko delete karna chahte hain?")) return;
+    if (!confirm("Are you sure you want to delete this portfolio item?")) return;
     try {
       const res = await deletePortfolioItem(id);
       if (res.success) {
@@ -217,27 +356,132 @@ export default function Portfolio() {
         (a) => a.category?.toLowerCase() === activeTab.toLowerCase()
       );
 
+  // ─── Shared form section renderer (used by both add + edit dialogs) ────────
+  const renderFormFields = (
+    form: typeof defaultForm,
+    setForm: (f: any) => void,
+    mode: "add" | "edit"
+  ) => {
+    const pfx = mode;
+    return (
+      <div className="grid gap-5 py-2">
+        {/* Row 1 – Title + Category */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label htmlFor={`${pfx}-title`}>
+              Title <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              id={`${pfx}-title`}
+              placeholder="e.g. Royal Engagement Ceremony"
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor={`${pfx}-category`}>
+              Category <span className="text-destructive">*</span>
+            </Label>
+            <select
+              id={`${pfx}-category`}
+              value={form.category}
+              onChange={(e) => setForm({ ...form, category: e.target.value })}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {CATEGORIES.filter((c) => c !== "All").map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Row 2 – Client Name + Event Date */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label htmlFor={`${pfx}-client`}>Client Name</Label>
+            <Input
+              id={`${pfx}-client`}
+              placeholder="e.g. Rahul & Anjali"
+              value={form.clientName}
+              onChange={(e) => setForm({ ...form, clientName: e.target.value })}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor={`${pfx}-date`}>Event Date</Label>
+            <Input
+              id={`${pfx}-date`}
+              type="date"
+              value={form.eventDate}
+              onChange={(e) => setForm({ ...form, eventDate: e.target.value })}
+            />
+          </div>
+        </div>
+
+        {/* Row 3 – Slug */}
+        <div className="space-y-1.5">
+          <Label htmlFor={`${pfx}-slug`}>
+            Slug{" "}
+            <span className="text-xs text-muted-foreground">
+              (optional – auto-generated)
+            </span>
+          </Label>
+          <Input
+            id={`${pfx}-slug`}
+            placeholder="e.g. royal-engagement-2026"
+            value={form.slug}
+            onChange={(e) => setForm({ ...form, slug: e.target.value })}
+          />
+        </div>
+
+        {/* Row 4 – Description */}
+        <div className="space-y-1.5">
+          <Label htmlFor={`${pfx}-desc`}>Description</Label>
+          <textarea
+            id={`${pfx}-desc`}
+            rows={3}
+            placeholder="Short description about the album..."
+            value={form.description}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+            className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+          />
+        </div>
+
+        {/* Featured toggle */}
+        <div className="flex items-center gap-3">
+          <input
+            type="checkbox"
+            id={`${pfx}-featured`}
+            checked={form.featured}
+            onChange={(e) => setForm({ ...form, featured: e.target.checked })}
+            className="h-4 w-4 rounded border-input accent-primary"
+          />
+          <Label htmlFor={`${pfx}-featured`} className="cursor-pointer">
+            Mark as Featured{" "}
+            <span className="text-xs text-muted-foreground">
+              (Will be visible on the homepage)
+            </span>
+          </Label>
+        </div>
+      </div>
+    );
+  };
+
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <>
       <Header title="Portfolio" subtitle="Manage your photography collections" />
       <div className="p-6 space-y-6">
-        {/* Hidden file inputs */}
-        <input
-          ref={coverInputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={handleCoverChange}
-        />
-        <input
-          ref={galleryInputRef}
-          type="file"
-          multiple
-          accept="image/*"
-          className="hidden"
-          onChange={handleGalleryChange}
-        />
+        {/* Hidden file inputs – Add */}
+        <input ref={addCoverRef} type="file" accept="image/*" className="hidden" onChange={handleAddCoverChange} />
+        <input ref={addGalleryRef} type="file" multiple accept="image/*" className="hidden" onChange={handleAddGalleryChange} />
+
+        {/* Hidden file inputs – Edit */}
+        <input ref={editCoverRef} type="file" accept="image/*" className="hidden" onChange={handleEditCoverChange} />
+        <input ref={editGalleryRef} type="file" multiple accept="image/*" className="hidden" onChange={handleEditGalleryChange} />
 
         {/* Tabs + Action buttons */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -251,14 +495,9 @@ export default function Portfolio() {
             </TabsList>
 
             <div className="flex gap-2">
-              <Button variant="ghost" size="icon">
-                <Grid3X3 className="h-4 w-4" />
-              </Button>
-              <Button variant="ghost" size="icon">
-                <List className="h-4 w-4" />
-              </Button>
-              {/* ── Add New Portfolio Button ────────────────────────── */}
-              <Button size="sm" className="gap-2" onClick={openDialog}>
+              <Button variant="ghost" size="icon"><Grid3X3 className="h-4 w-4" /></Button>
+              <Button variant="ghost" size="icon"><List className="h-4 w-4" /></Button>
+              <Button size="sm" className="gap-2" onClick={openAddDialog}>
                 <Plus className="h-4 w-4" />
                 Add Portfolio
               </Button>
@@ -273,14 +512,9 @@ export default function Portfolio() {
             ) : filteredAlbums.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 gap-4 text-muted-foreground">
                 <FolderOpen className="h-12 w-12 opacity-30" />
-                <p className="text-sm">Koi portfolio item nahi mila</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-2"
-                  onClick={openDialog}
-                >
-                  <Plus className="h-4 w-4" /> Pehla Album Add Karo
+                <p className="text-sm">No portfolio items found</p>
+                <Button variant="outline" size="sm" className="gap-2" onClick={openAddDialog}>
+                  <Plus className="h-4 w-4" /> Add First Album
                 </Button>
               </div>
             ) : (
@@ -294,16 +528,11 @@ export default function Portfolio() {
                   <motion.div key={album.id} variants={item}>
                     <Card className="glass-card group overflow-hidden stat-card-hover cursor-pointer">
                       <div
-                        className={`h-40 bg-gradient-to-br ${colors[i % colors.length]
-                          } flex items-center justify-center relative overflow-hidden`}
+                        className={`h-40 bg-gradient-to-br ${colors[i % colors.length]} flex items-center justify-center relative overflow-hidden`}
                       >
                         {album.coverImage ? (
                           <img
-                            src={
-                              album.coverImage.startsWith("http")
-                                ? album.coverImage
-                                : `${API_URL}${album.coverImage}`
-                            }
+                            src={resolveImg(album.coverImage)!}
                             alt={album.title}
                             className="w-full h-full object-cover absolute inset-0"
                           />
@@ -317,11 +546,17 @@ export default function Portfolio() {
                           </Badge>
                         )}
 
+                        {/* ── Hover action buttons ─────────────────────── */}
                         <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 z-10">
                           <Button
                             variant="ghost"
                             size="icon"
                             className="h-7 w-7 bg-background/80 hover:bg-background"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openEditDialog(album);
+                            }}
+                            title="Edit portfolio"
                           >
                             <Edit className="h-3 w-3" />
                           </Button>
@@ -333,6 +568,7 @@ export default function Portfolio() {
                               e.stopPropagation();
                               handleDelete(album.id);
                             }}
+                            title="Delete portfolio"
                           >
                             <Trash2 className="h-3 w-3" />
                           </Button>
@@ -347,10 +583,7 @@ export default function Portfolio() {
                           <span className="text-xs text-muted-foreground">
                             {album.photoCount || (album.images?.length ?? 0)} photos
                           </span>
-                          <Badge
-                            variant="outline"
-                            className="text-xs border-border/50"
-                          >
+                          <Badge variant="outline" className="text-xs border-border/50">
                             {album.category}
                           </Badge>
                         </div>
@@ -369,203 +602,244 @@ export default function Portfolio() {
         </Tabs>
       </div>
 
-      {/* ─── Add New Portfolio Dialog ────────────────────────────────────────── */}
-      <Dialog open={dialogOpen} onOpenChange={(o) => { if (!submitting) setDialogOpen(o); }}>
+      {/* ═══════════════════════════════════════════════════════════════════
+          ADD NEW PORTFOLIO DIALOG
+      ════════════════════════════════════════════════════════════════════ */}
+      <Dialog open={addDialogOpen} onOpenChange={(o) => { if (!addSubmitting) setAddDialogOpen(o); }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg">
               <ImagePlus className="h-5 w-5 text-primary" />
-              Naya Portfolio Album Add Karo
+              Add New Portfolio Album
             </DialogTitle>
           </DialogHeader>
 
-          <div className="grid gap-5 py-2">
-            {/* Row 1 – Title + Category */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="pf-title">
-                  Title <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="pf-title"
-                  placeholder="e.g. Royal Engagement Ceremony"
-                  value={form.title}
-                  onChange={(e) => setForm({ ...form, title: e.target.value })}
-                />
-              </div>
+          {renderFormFields(addForm, setAddForm, "add")}
 
-              <div className="space-y-1.5">
-                <Label htmlFor="pf-category">
-                  Category <span className="text-destructive">*</span>
-                </Label>
-                <select
-                  id="pf-category"
-                  value={form.category}
-                  onChange={(e) => setForm({ ...form, category: e.target.value })}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  {CATEGORIES.filter((c) => c !== "All").map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Row 2 – Client Name + Event Date */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="pf-client">Client Name</Label>
-                <Input
-                  id="pf-client"
-                  placeholder="e.g. Rahul & Anjali"
-                  value={form.clientName}
-                  onChange={(e) => setForm({ ...form, clientName: e.target.value })}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="pf-date">Event Date</Label>
-                <Input
-                  id="pf-date"
-                  type="date"
-                  value={form.eventDate}
-                  onChange={(e) => setForm({ ...form, eventDate: e.target.value })}
-                />
-              </div>
-            </div>
-
-            {/* Row 3 – Slug + Description */}
-            <div className="space-y-1.5">
-              <Label htmlFor="pf-slug">
-                Slug{" "}
-                <span className="text-xs text-muted-foreground">
-                  (optional – auto-generate hoga)
-                </span>
-              </Label>
-              <Input
-                id="pf-slug"
-                placeholder="e.g. royal-engagement-2026"
-                value={form.slug}
-                onChange={(e) => setForm({ ...form, slug: e.target.value })}
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="pf-desc">Description</Label>
-              <textarea
-                id="pf-desc"
-                rows={3}
-                placeholder="Album ke baare mein short description..."
-                value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
-                className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
-              />
-            </div>
-
-            {/* Cover Image */}
-            <div className="space-y-2">
-              <Label>
-                Cover Photo <span className="text-destructive">*</span>
-                <span className="text-xs text-muted-foreground ml-1">
-                  (Card pe dikhne wali photo)
-                </span>
-              </Label>
-              <div
-                onClick={() => coverInputRef.current?.click()}
-                className="relative border-2 border-dashed border-border rounded-xl p-4 cursor-pointer hover:border-primary/60 transition-colors flex items-center gap-4 bg-muted/20"
-              >
-                {coverPreview ? (
-                  <img
-                    src={coverPreview}
-                    alt="cover-preview"
-                    className="h-20 w-28 object-cover rounded-lg"
-                  />
-                ) : (
-                  <div className="h-20 w-28 rounded-lg bg-muted/50 flex items-center justify-center">
-                    <Upload className="h-6 w-6 text-muted-foreground" />
-                  </div>
-                )}
-                <div>
-                  <p className="text-sm font-medium">
-                    {coverPreview ? coverFile?.name : "Cover photo choose karo"}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    JPG, PNG, WebP – max 10 MB
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Gallery Images */}
-            <div className="space-y-2">
-              <Label>
-                Gallery Photos
-                <span className="text-xs text-muted-foreground ml-1">
-                  (View Story mein dikhne wali photos)
-                </span>
-              </Label>
-
-              {galleryPreviews.length > 0 && (
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {galleryPreviews.map((url, idx) => (
-                    <div key={idx} className="relative group">
-                      <img
-                        src={url}
-                        alt={`gallery-${idx}`}
-                        className="h-16 w-20 object-cover rounded-lg border border-border"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeGalleryImage(idx)}
-                        className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full h-4 w-4 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        <X className="h-2.5 w-2.5" />
-                      </button>
-                    </div>
-                  ))}
+          {/* Cover Image */}
+          <div className="space-y-2">
+            <Label>
+              Cover Photo <span className="text-destructive">*</span>
+              <span className="text-xs text-muted-foreground ml-1">(Photo shown on the main card)</span>
+            </Label>
+            <div
+              onClick={() => addCoverRef.current?.click()}
+              className="relative border-2 border-dashed border-border rounded-xl p-4 cursor-pointer hover:border-primary/60 transition-colors flex items-center gap-4 bg-muted/20"
+            >
+              {addCoverPreview ? (
+                <img src={addCoverPreview} alt="cover-preview" className="h-20 w-28 object-cover rounded-lg" />
+              ) : (
+                <div className="h-20 w-28 rounded-lg bg-muted/50 flex items-center justify-center">
+                  <Upload className="h-6 w-6 text-muted-foreground" />
                 </div>
               )}
-
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="gap-2 w-full border-dashed"
-                onClick={() => galleryInputRef.current?.click()}
-              >
-                <ImagePlus className="h-4 w-4" />
-                {galleryFiles.length > 0
-                  ? `${galleryFiles.length} photos selected – Aur Add Karo`
-                  : "Gallery Photos Choose Karo"}
-              </Button>
+              <div>
+                <p className="text-sm font-medium">{addCoverPreview ? addCoverFile?.name : "Choose cover photo"}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">JPG, PNG, WebP – max 10 MB</p>
+              </div>
             </div>
           </div>
 
-          <DialogFooter className="gap-2">
+          {/* Gallery Images */}
+          <div className="space-y-2">
+            <Label>
+              Gallery Photos
+              <span className="text-xs text-muted-foreground ml-1">(Photos visible in the View Story popup)</span>
+            </Label>
+            {addGalleryPreviews.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-2">
+                {addGalleryPreviews.map((url, idx) => (
+                  <div key={idx} className="relative group">
+                    <img src={url} alt={`gallery-${idx}`} className="h-16 w-20 object-cover rounded-lg border border-border" />
+                    <button
+                      type="button"
+                      onClick={() => removeAddGallery(idx)}
+                      className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full h-4 w-4 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             <Button
+              type="button"
               variant="outline"
-              onClick={() => setDialogOpen(false)}
-              disabled={submitting}
+              size="sm"
+              className="gap-2 w-full border-dashed"
+              onClick={() => addGalleryRef.current?.click()}
             >
+              <ImagePlus className="h-4 w-4" />
+              {addGalleryFiles.length > 0
+                ? `${addGalleryFiles.length} photos selected – Add More`
+                : "Choose Gallery Photos"}
+            </Button>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setAddDialogOpen(false)} disabled={addSubmitting}>Cancel</Button>
+            <Button onClick={handleAddSubmit} disabled={addSubmitting} className="gap-2 min-w-[140px]">
+              {addSubmitting ? (
+                <><Loader2 className="h-4 w-4 animate-spin" /> Uploading...</>
+              ) : (
+                <><Plus className="h-4 w-4" /> Add Portfolio</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          EDIT PORTFOLIO DIALOG  →  PUT /api/portfolio/:id
+      ════════════════════════════════════════════════════════════════════ */}
+      <Dialog open={editDialogOpen} onOpenChange={(o) => { if (!editSubmitting) setEditDialogOpen(o); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <Edit className="h-5 w-5 text-primary" />
+              Edit Portfolio Item
+              {editingAlbum && (
+                <span className="text-xs text-muted-foreground font-normal ml-1">
+                  (ID: {editingAlbum.id})
+                </span>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+
+          {renderFormFields(editForm, setEditForm, "edit")}
+
+          {/* Current Cover Image + Replace */}
+          <div className="space-y-2">
+            <Label>
+              Cover Photo
+              <span className="text-xs text-muted-foreground ml-1">(Leave empty to keep current)</span>
+            </Label>
+            <div
+              onClick={() => editCoverRef.current?.click()}
+              className="relative border-2 border-dashed border-border rounded-xl p-4 cursor-pointer hover:border-primary/60 transition-colors flex items-center gap-4 bg-muted/20"
+            >
+              {/* Show new preview if chosen, else show existing */}
+              {editCoverPreview ? (
+                <img src={editCoverPreview} alt="new-cover" className="h-20 w-28 object-cover rounded-lg" />
+              ) : editingAlbum?.coverImage ? (
+                <img
+                  src={resolveImg(editingAlbum.coverImage)!}
+                  alt="current-cover"
+                  className="h-20 w-28 object-cover rounded-lg opacity-80"
+                />
+              ) : (
+                <div className="h-20 w-28 rounded-lg bg-muted/50 flex items-center justify-center">
+                  <Upload className="h-6 w-6 text-muted-foreground" />
+                </div>
+              )}
+              <div>
+                <p className="text-sm font-medium">
+                  {editCoverFile
+                    ? `New: ${editCoverFile.name}`
+                    : editingAlbum?.coverImage
+                      ? "Current cover (click to replace)"
+                      : "Choose cover photo"}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">JPG, PNG, WebP – max 10 MB</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Existing gallery – DELETE /api/portfolio/:id/image */}
+          {editingAlbum && Array.isArray(editingAlbum.images) && editingAlbum.images.length > 0 && (
+            <div className="space-y-2">
+              <Label>
+                Existing Gallery
+                <span className="text-xs text-muted-foreground ml-1 font-normal">
+                  ({editingAlbum.images.length} photos — hover to remove)
+                </span>
+              </Label>
+              <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto pr-1">
+                {editingAlbum.images.map((url: string, idx: number) => {
+                  const isDeleting = deletingImageUrl === url;
+                  return (
+                    <div key={url + idx} className="relative group shrink-0">
+                      <img
+                        src={resolveImg(url)!}
+                        alt={`existing-${idx}`}
+                        className={`h-16 w-20 object-cover rounded-lg border border-border transition-opacity ${isDeleting ? "opacity-30" : "opacity-80 group-hover:opacity-100"
+                          }`}
+                      />
+                      {/* Spinner overlay while this image is being deleted */}
+                      {isDeleting && (
+                        <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-background/40">
+                          <Loader2 className="h-4 w-4 animate-spin text-destructive" />
+                        </div>
+                      )}
+                      {/* Delete button – calls DELETE /api/portfolio/:id/image */}
+                      {!isDeleting && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveExistingImage(url)}
+                          disabled={!!deletingImageUrl}
+                          title="Delete this image"
+                          className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full h-5 w-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-md disabled:cursor-not-allowed"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                💡 New photos added below will be <strong>appended</strong> to these, not replace them.
+              </p>
+            </div>
+          )}
+
+          {/* New Gallery Images to APPEND */}
+          <div className="space-y-2">
+            <Label>
+              Add More Photos
+              <span className="text-xs text-muted-foreground ml-1">
+                (Will be ADDED to existing photos, not replace them)
+              </span>
+            </Label>
+            {editNewGalleryPreviews.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-2">
+                {editNewGalleryPreviews.map((url, idx) => (
+                  <div key={idx} className="relative group">
+                    <img src={url} alt={`new-gallery-${idx}`} className="h-16 w-20 object-cover rounded-lg border border-primary/40" />
+                    <button
+                      type="button"
+                      onClick={() => removeEditNewGallery(idx)}
+                      className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full h-4 w-4 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2 w-full border-dashed"
+              onClick={() => editGalleryRef.current?.click()}
+            >
+              <ImagePlus className="h-4 w-4" />
+              {editNewGalleryFiles.length > 0
+                ? `${editNewGalleryFiles.length} new photos – Add More`
+                : "Choose New Gallery Photos"}
+            </Button>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)} disabled={editSubmitting}>
               Cancel
             </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={submitting}
-              className="gap-2 min-w-[140px]"
-            >
-              {submitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Uploading...
-                </>
+            <Button onClick={handleEditSubmit} disabled={editSubmitting} className="gap-2 min-w-[160px]">
+              {editSubmitting ? (
+                <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</>
               ) : (
-                <>
-                  <Plus className="h-4 w-4" />
-                  Add Portfolio
-                </>
+                <><Save className="h-4 w-4" /> Save Changes</>
               )}
             </Button>
           </DialogFooter>

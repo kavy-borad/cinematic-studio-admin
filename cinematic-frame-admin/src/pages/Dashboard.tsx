@@ -11,10 +11,10 @@ import { getDashboardStats, getRevenueChart } from "@/lib/api";
 import { useNavigate } from "react-router-dom";
 
 const statusColor: Record<string, string> = {
-  New: "bg-info/20 text-info border-info/30",
-  Contacted: "bg-warning/20 text-warning border-warning/30",
-  Booked: "bg-success/20 text-success border-success/30",
-  Closed: "bg-muted text-muted-foreground border-border/30",
+  New: "bg-blue-500/10 text-blue-500 border-blue-500/20",
+  Contacted: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
+  Booked: "bg-green-500/10 text-green-500 border-green-500/20",
+  Closed: "bg-red-500/10 text-red-500 border-red-500/20",
 };
 
 const container = { hidden: {}, show: { transition: { staggerChildren: 0.06 } } };
