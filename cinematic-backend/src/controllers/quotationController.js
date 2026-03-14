@@ -293,11 +293,10 @@ exports.updateQuotation = async (req, res) => {
             return res.status(404).json({ success: false, message: "Quotation not found." });
         }
 
-        // Prevent changing ID or internal fields if any
         const updatableFields = [
             'name', 'email', 'phone', 'city', 'eventType', 'eventDate',
             'venue', 'guestCount', 'functions', 'servicesRequested',
-            'budget', 'requirements'
+            'budget', 'requirements', 'gstRate'
         ];
 
         updatableFields.forEach(field => {
@@ -359,5 +358,183 @@ exports.markAllAsRead = async (req, res) => {
         res.json({ success: true, message: "All quotations marked as read." });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// GET /api/quotations/:id/pdf (Admin - Download PDF)
+exports.downloadQuotationPDF = async (req, res) => {
+    try {
+        const Quotation = require("../models/Quotation");
+        const quotation = await Quotation.findByPk(req.params.id);
+        if (!quotation) {
+            return res.status(404).json({ success: false, message: "Quotation not found." });
+        }
+
+        // Prepare client info
+        let clientAddress = quotation.city ? quotation.city : "-";
+
+        // Import the new PDF generation utility
+        const { generateQuotationPDF } = require("../utils/pdf/generateQuotation");
+
+        // Format dates
+        const formatDate = (dateStr) => {
+            if (!dateStr) return "-";
+            const d = new Date(dateStr);
+            if (isNaN(d)) return dateStr;
+            return d.toLocaleDateString("en-US", { year: 'numeric', month: 'long', day: 'numeric' });
+        };
+        const invoiceDate = quotation.createdAt ? formatDate(quotation.createdAt) : formatDate(new Date());
+
+        // Prepare items array
+        const items = [];
+
+        const getDefaultDeliverables = (serviceName) => {
+            if (!serviceName) return [];
+            const name = serviceName.toLowerCase();
+            let deliverables = [];
+            if (name.includes('drone') || name.includes('aerial')) deliverables = ['Aerial venue shots', 'Couple cinematic shots'];
+            else if (name.includes('album') || name.includes('print')) deliverables = ['40 pages luxury album', 'HD matte prints'];
+            else if (name.includes('cinematic') || name.includes('video') || name.includes('film')) deliverables = ['5-7 min cinematic highlight', 'Full documentary edit'];
+            else if (name.includes('photograph') || name.includes('photo')) deliverables = ['300+ edited photos', 'Color corrected images'];
+            else deliverables = ['Event coverage', 'High-res images'];
+            return deliverables;
+        };
+
+        if (quotation.eventType && typeof quotation.eventType === 'string' && quotation.eventType !== 'Other' && quotation.eventType !== '') {
+            items.push({ service: `${quotation.eventType} Coverage`, deliverables: ['2 Photographers', '1 Cinematographer', 'Full event coverage'], price: "-", total: "-" });
+        }
+        if (quotation.functions && typeof quotation.functions === 'string' && quotation.functions !== '') {
+            items.push({ service: `Functions: ${quotation.functions}`, deliverables: ['Full coverage of pre-wedding events', 'Raw footage on request'], price: "-", total: "-" });
+        }
+
+        let customReqs = {};
+        if (quotation.requirements) {
+            try {
+                if (quotation.requirements.startsWith('{')) {
+                    customReqs = JSON.parse(quotation.requirements);
+                } else {
+                    customReqs = { 'global': quotation.requirements };
+                }
+            } catch (e) {
+                customReqs = { 'global': quotation.requirements };
+            }
+        }
+
+        let srvs = quotation.servicesRequested;
+        if (srvs) {
+            if (typeof srvs === "string") {
+                try {
+                    const parsed = JSON.parse(srvs);
+                    if (Array.isArray(parsed)) srvs = parsed;
+                } catch (e) {
+                    srvs = srvs.split(",").map(s => s.trim());
+                }
+            }
+            if (Array.isArray(srvs) && srvs.length > 0) {
+                srvs.forEach(s => {
+                    let deliverableText = getDefaultDeliverables(s);
+                    
+                    if (customReqs[s] && customReqs[s].trim() !== '') {
+                        deliverableText = customReqs[s].split('\n').map(l => l.trim()).filter(l => l !== '');
+                    }
+
+                    items.push({ service: s, deliverables: deliverableText, price: "-", total: "-" });
+                });
+            }
+        }
+
+        let budgetText = quotation.budget && quotation.budget.trim() !== "" ? quotation.budget.trim() : "-";
+
+        let rawGst = quotation.gstRate && quotation.gstRate.trim() !== "" ? quotation.gstRate.trim() : "18";
+
+        let taxValue = "-";
+        let totalValue = budgetText;
+
+        const tr = parseFloat(rawGst);
+        if (!isNaN(tr) && tr >= 0) {
+            // Function to parse Indian currency strings like "3L", "2 Lakh", "3,50,000", "5k"
+            const parseBudgetToNumber = (str) => {
+                let cleanStr = String(str).toLowerCase().replace(/,/g, '').replace(/₹/g, '').replace(/rs/g, '').trim();
+                let multiplier = 1;
+
+                if (cleanStr.includes('lakh') || cleanStr.includes('l')) {
+                    multiplier = 100000;
+                    cleanStr = cleanStr.replace(/lakhs?|l/g, '').trim();
+                } else if (cleanStr.includes('k')) {
+                    multiplier = 1000;
+                    cleanStr = cleanStr.replace(/k/g, '').trim();
+                }
+
+                const num = parseFloat(cleanStr);
+                return !isNaN(num) ? num * multiplier : NaN;
+            };
+
+            const numBudget = parseBudgetToNumber(budgetText);
+
+            if (!isNaN(numBudget) && numBudget > 0 && !budgetText.includes("-")) {
+                // Proper accurate mathematical calculation if budget is a clear number (not a range)
+                const calculatedTax = (numBudget * tr) / 100;
+                const calculatedTotal = numBudget + calculatedTax;
+
+                // Format back with Indian Rupee system
+                taxValue = `₹${calculatedTax.toLocaleString('en-IN')} (${tr}% GST)`;
+                totalValue = `₹${calculatedTotal.toLocaleString('en-IN')}`;
+
+                // Make sure budgetText displays nicely too if we calculated it
+                budgetText = `₹${numBudget.toLocaleString('en-IN')}`;
+            } else {
+                // Fallback to string appending for ranges like "₹3L - ₹5L" or unparsable text
+                let gstStr = rawGst.includes("%") ? rawGst : `${rawGst}%`;
+                taxValue = `${gstStr} GST`;
+                if (budgetText !== "-") {
+                    totalValue = `${budgetText} + ${taxValue}`;
+                }
+            }
+        }
+
+        if (items.length === 0) {
+            items.push({ service: quotation.eventType || "Custom Photography Package", deliverables: ["Professional photography", "Edited images"], price: budgetText, total: budgetText });
+        } else {
+            // we attach budget to the first item or let styling handle it
+            items[0].price = budgetText;
+            items[0].total = budgetText;
+        }
+
+        // Map quotation fields to PDF rendering payload
+        const payload = {
+            invoice: {
+                number: String(quotation.id).padStart(3, "0"),
+                date: invoiceDate,
+                dueDate: formatDate(new Date(new Date().getTime() + 14 * 24 * 60 * 60 * 1000)), // +14 days 
+            },
+            client: {
+                name: quotation.name,
+                address: clientAddress,
+                phone: quotation.phone || "-",
+            },
+            event: {
+                type: quotation.eventType || "-",
+                date: quotation.eventDate || "-",
+                venue: quotation.venue || "-",
+                guestCount: quotation.guestCount || "-"
+            },
+            items: items,
+            subtotal: budgetText,
+            tax: taxValue,
+            total: totalValue
+        };
+
+        const pdfBuffer = await generateQuotationPDF(payload);
+
+        res.set({
+            "Content-Type": "application/pdf",
+            "Content-Disposition": `attachment; filename=Quotation_Q-${String(quotation.id).padStart(3, "0")}.pdf`,
+            "Content-Length": pdfBuffer.length
+        });
+
+        res.end(pdfBuffer);
+    } catch (error) {
+        console.error("PDF generation failed:", error);
+        res.status(500).json({ success: false, message: "Failed to generate PDF." });
     }
 };

@@ -58,6 +58,11 @@ const Quotation = sequelize.define("Quotation", {
         type: DataTypes.TEXT,
         allowNull: true,
     },
+    gstRate: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        defaultValue: "18",
+    },
     status: {
         type: DataTypes.ENUM("New", "Contacted", "Booked", "Closed"),
         defaultValue: "New",

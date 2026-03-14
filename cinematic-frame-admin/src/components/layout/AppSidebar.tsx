@@ -2,7 +2,7 @@ import { NavLink, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   LayoutDashboard, Image, FileText, DollarSign, Users,
-  Star, BarChart3, Settings, Camera, ChevronLeft, ChevronRight, LogOut, ShieldCheck
+  Star, BarChart3, Settings, Camera, ChevronLeft, ChevronRight, LogOut, ShieldCheck, Receipt
 } from "lucide-react";
 import { useSidebarStore } from "@/store/sidebar";
 import { useAuth } from "@/contexts/AuthContext";
@@ -16,6 +16,7 @@ const links = [
   { to: "/clients", icon: Users, label: "Clients" },
   { to: "/testimonials", icon: Star, label: "Testimonials" },
   { to: "/analytics", icon: BarChart3, label: "Analytics" },
+  { to: "/bills", icon: Receipt, label: "Bills" },
   { to: "/admins", icon: ShieldCheck, label: "Admins" },
   { to: "/settings", icon: Settings, label: "Settings" },
 ];

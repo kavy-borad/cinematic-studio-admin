@@ -1,17 +1,15 @@
 import { useEffect, useState } from "react";
 import { Header } from "@/components/layout/Header";
-import { Card, CardContent, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Eye, Trash2, Loader2, Edit2, Save, X, Printer } from "lucide-react";
+import { Edit2, Eye, Trash2, Loader2, Save, X, Receipt } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { useNotificationStore } from "@/store/notifications";
-import { useNavigate } from "react-router-dom";
-import api, { API_URL, getQuotations, updateQuotationStatus, deleteQuotation, updateQuotation, markQuotationAsRead } from "@/lib/api";
+import { createBill, deleteQuotation, getQuotations, updateQuotation } from "@/lib/api";
 
 const statusColor: Record<string, string> = {
   New: "bg-blue-500/10 text-blue-500 border-blue-500/20",
@@ -20,25 +18,151 @@ const statusColor: Record<string, string> = {
   Closed: "bg-red-500/10 text-red-500 border-red-500/20",
 };
 
-export default function Quotations() {
-  const navigate = useNavigate();
+export default function Bills() {
   const [quotations, setQuotations] = useState<any[]>([]);
   const [selected, setSelected] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("All");
   const [isEditing, setIsEditing] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editForm, setEditForm] = useState<any>({});
-  const removeNotification = useNotificationStore((s) => s.removeNotification);
+
+  const hasValue = (value: unknown) => {
+    if (value === null || value === undefined) return false;
+    if (typeof value === "string") return value.trim().length > 0;
+    return true;
+  };
+
+  const renderReadOnlyRow = (label: string, value: unknown, className?: string) => {
+    if (!hasValue(value)) return null;
+
+    return (
+      <div className="flex justify-between">
+        <span className="text-xs text-muted-foreground">{label}</span>
+        <span className={className || "text-sm text-right break-all"}>{String(value)}</span>
+      </div>
+    );
+  };
+
+  const parseNumber = (value: unknown): number => {
+    if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+    const raw = String(value ?? "").toLowerCase().trim();
+    if (!raw) return 0;
+
+    let cleaned = raw.replace(/,/g, "").replace(/₹|rs\.?/g, "").trim();
+    let multiplier = 1;
+
+    if (cleaned.includes("lakh") || /\d\s*l$/.test(cleaned)) {
+      multiplier = 100000;
+      cleaned = cleaned.replace(/lakhs?|l/g, "").trim();
+    } else if (cleaned.includes("k")) {
+      multiplier = 1000;
+      cleaned = cleaned.replace(/k/g, "").trim();
+    }
+
+    const numeric = Number(cleaned);
+    return Number.isFinite(numeric) ? Number((numeric * multiplier).toFixed(2)) : 0;
+  };
+
+  const getServicesArray = (servicesRequested: unknown): string[] => {
+    if (Array.isArray(servicesRequested)) {
+      return servicesRequested.map((s) => String(s).trim()).filter(Boolean);
+    }
+
+    if (typeof servicesRequested === "string") {
+      const value = servicesRequested.trim();
+      if (!value) return [];
+
+      try {
+        const parsed = value.startsWith("[") ? JSON.parse(value) : value.split(",");
+        if (Array.isArray(parsed)) {
+          return parsed.map((s) => String(s).trim()).filter(Boolean);
+        }
+      } catch {
+        return value.split(",").map((s) => s.trim()).filter(Boolean);
+      }
+    }
+
+    return [];
+  };
+
+  const getRequirementsMap = (requirements: unknown): Record<string, string> => {
+    if (typeof requirements !== "string" || !requirements.trim()) return {};
+
+    try {
+      const parsed = requirements.trim().startsWith("{") ? JSON.parse(requirements) : { global: requirements };
+      if (parsed && typeof parsed === "object") {
+        return Object.entries(parsed).reduce((acc, [key, value]) => {
+          if (value !== undefined && value !== null && String(value).trim()) {
+            acc[key] = String(value).trim();
+          }
+          return acc;
+        }, {} as Record<string, string>);
+      }
+    } catch {
+      return { global: requirements.trim() };
+    }
+
+    return {};
+  };
+
+  const canGenerateBill = (quotation: any) => {
+    if (!quotation) return false;
+    const subtotal = parseNumber(quotation.budget);
+    return subtotal > 0;
+  };
+
+  const buildBillPayload = (quotation: any) => {
+    const services = getServicesArray(quotation.servicesRequested);
+    const requirementsMap = getRequirementsMap(quotation.requirements);
+
+    const subtotalBase = parseNumber(quotation.budget);
+    const itemCount = Math.max(services.length, 1);
+    const perItemPrice = itemCount > 0 ? Number((subtotalBase / itemCount).toFixed(2)) : 0;
+
+    const items = (services.length > 0 ? services : [quotation.eventType || "Event Coverage"]).map((service) => ({
+      service,
+      deliverables: requirementsMap[service] || requirementsMap.global || "Professional coverage as discussed",
+      price: perItemPrice,
+    }));
+
+    const subtotal = Number(items.reduce((sum, item) => sum + Number(item.price || 0), 0).toFixed(2));
+    const gstRate = parseNumber(quotation.gstRate) || 18;
+    const taxAmount = Number(((subtotal * gstRate) / 100).toFixed(2));
+    const totalAmount = Number((subtotal + taxAmount).toFixed(2));
+    const advancePaid = 0;
+    const balanceAmount = Number((totalAmount - advancePaid).toFixed(2));
+
+    const dueDate = quotation.eventDate || undefined;
+
+    return {
+      quotationId: quotation.id,
+      clientName: quotation.name,
+      clientEmail: quotation.email,
+      clientPhone: quotation.phone || undefined,
+      clientAddress: quotation.city || undefined,
+      eventType: quotation.eventType,
+      eventDate: quotation.eventDate || undefined,
+      items,
+      subtotal,
+      gstRate,
+      taxAmount,
+      totalAmount,
+      advancePaid,
+      balanceAmount,
+      dueDate,
+      status: "Unpaid" as const,
+      notes: requirementsMap.global || undefined,
+    };
+  };
 
   const fetchQuotations = async () => {
     try {
-      const res = await getQuotations(filter);
+      const res = await getQuotations("Booked");
       if (res.success) {
         setQuotations(res.data);
       }
     } catch (error) {
-      console.error("Failed to load quotations:", error);
+      console.error("Failed to load booked quotations:", error);
     } finally {
       setLoading(false);
     }
@@ -47,20 +171,7 @@ export default function Quotations() {
   useEffect(() => {
     setLoading(true);
     fetchQuotations();
-  }, [filter]);
-
-  const handleStatusChange = async (id: number, status: string) => {
-    try {
-      const res = await updateQuotationStatus(id, status);
-      if (res.success) {
-        toast.success(`Status updated to ${status}`);
-        setQuotations((prev) => prev.map((q) => (q.id === id ? { ...q, status } : q)));
-        if (selected?.id === id) setSelected({ ...selected, status });
-      }
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || "Failed to update status");
-    }
-  };
+  }, []);
 
   const handleEditChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setEditForm({ ...editForm, [e.target.name]: e.target.value });
@@ -70,7 +181,7 @@ export default function Quotations() {
     try {
       const res = await updateQuotation(selected.id, editForm);
       if (res.success) {
-        toast.success("Quotation updated");
+        toast.success("Bill details updated");
         setIsEditing(false);
         setQuotations((prev) => prev.map((q) => (q.id === selected.id ? { ...q, ...editForm } : q)));
         setSelected({ ...selected, ...editForm });
@@ -81,11 +192,11 @@ export default function Quotations() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm("Delete this quotation?")) return;
+    if (!confirm("Are you sure you want to delete this bill?")) return;
     try {
       const res = await deleteQuotation(id);
       if (res.success) {
-        toast.success("Quotation deleted");
+        toast.success("Bill deleted successfully");
         setQuotations((prev) => prev.filter((q) => q.id !== id));
         if (selected?.id === id) {
           setSelected(null);
@@ -97,29 +208,29 @@ export default function Quotations() {
     }
   };
 
-  const handleDownloadPDF = async (id: number) => {
+  const handleGenerateBill = async (quotation: any) => {
     try {
-      toast.info("Generating professional PDF...");
-      const res = await api.get(`/quotations/${id}/pdf`, { responseType: 'blob' });
-      const url = window.URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute("download", `Quotation_Q-${String(id).padStart(3, "0")}.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      toast.success("PDF Downloaded successfully!");
-    } catch (error) {
-      console.error(error);
-      toast.error("Failed to generate PDF. Make sure server is running.");
+      toast.info("Creating bill...");
+      const payload = buildBillPayload(quotation);
+      const res = await createBill(payload);
+
+      if (res?.success) {
+        const invoiceNo = res?.data?.invoiceNumber || "N/A";
+        toast.success(`Bill created successfully (${invoiceNo})`);
+        console.log("[Bills] POST /api/bills response:", res);
+      } else {
+        toast.error("Bill creation failed");
+      }
+    } catch (error: any) {
+      console.error("[Bills] Failed to create bill:", error);
+      toast.error(error?.response?.data?.message || "Failed to create bill.");
     }
   };
-
 
   if (loading) {
     return (
       <>
-        <Header title="Quotations" subtitle="Manage client inquiries and quotes" />
+        <Header title="Bills" subtitle="Manage and generate bills for booked quotations" />
         <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
       </>
     );
@@ -127,20 +238,8 @@ export default function Quotations() {
 
   return (
     <>
-      <Header title="Quotations" subtitle="Manage client inquiries and quotes" />
+      <Header title="Bills" subtitle="Manage and generate bills for booked quotations" />
       <div className="p-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex gap-2">
-            {["All", "New", "Contacted", "Booked", "Closed"].map((f) => (
-              <Badge key={f} variant="outline"
-                className={`cursor-pointer hover:bg-muted/50 transition-colors px-3 py-1 ${filter === f ? "bg-primary/20 text-primary border-primary/40" : ""}`}
-                onClick={() => setFilter(f)}>
-                {f}
-              </Badge>
-            ))}
-          </div>
-        </div>
-
         <div className="grid grid-cols-1 gap-6">
           <Card className="glass-card">
             <CardContent className="p-0">
@@ -159,38 +258,33 @@ export default function Quotations() {
                   {quotations.length > 0 ? quotations.map((q) => (
                     <TableRow
                       key={q.id}
-                      className={`border-border/50 transition-colors ${!q.isRead ? "bg-red-500/5 border-l-2 border-l-red-500" : ""} hover:bg-muted/20`}
+                      className="border-border/50 transition-colors hover:bg-muted/20"
                     >
                       <TableCell className="font-mono text-xs text-muted-foreground">
-                        <div className="flex items-center gap-1.5">
-                          {!q.isRead && <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse flex-shrink-0" />}
-                          Q-{String(q.id).padStart(3, "0")}
-                        </div>
+                        B-{String(q.id).padStart(3, "0")}
                       </TableCell>
                       <TableCell className="font-medium">{q.name}</TableCell>
                       <TableCell className="text-sm">{q.eventType}</TableCell>
                       <TableCell className="font-semibold text-primary">{q.budget || "-"}</TableCell>
                       <TableCell><Badge variant="outline" className={statusColor[q.status] || ""}>{q.status}</Badge></TableCell>
                       <TableCell className="text-right pr-6">
-                        <div className="flex gap-1 justify-end">
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50"
+                        <div className="flex gap-2 justify-end">
+                          <Button variant="outline" size="sm" className="h-8 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 border-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled={!canGenerateBill(q)}
+                            title={!canGenerateBill(q) ? "Cannot generate bill with 0 total. Edit budget first." : ""}
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleDownloadPDF(q.id);
+                              handleGenerateBill(q);
                             }}
                           >
-                            <Printer className="h-4 w-4" />
+                            <Receipt className="h-4 w-4 mr-1.5" />
+                            Generate Bill
                           </Button>
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => {
                             e.stopPropagation();
                             setSelected(q);
                             setIsEditing(false);
                             setIsModalOpen(true);
-                            if (!q.isRead) {
-                              markQuotationAsRead(q.id).catch(() => { });
-                              setQuotations((prev) => prev.map((item) => item.id === q.id ? { ...item, isRead: true } : item));
-                              removeNotification(q.id);
-                            }
                           }}>
                             <Eye className="h-4 w-4" />
                           </Button>
@@ -203,7 +297,7 @@ export default function Quotations() {
                     </TableRow>
                   )) : (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground py-8">No quotations found</TableCell>
+                      <TableCell colSpan={6} className="text-center text-muted-foreground py-8">No booked quotations found to generate bills</TableCell>
                     </TableRow>
                   )}
                 </TableBody>
@@ -219,13 +313,15 @@ export default function Quotations() {
           {selected && (
             <>
               <DialogHeader className="flex flex-row items-center justify-between border-b border-border/50 pb-3 -mt-2 space-y-0 text-left">
-                <DialogTitle className="text-base font-sans font-semibold">Quotation Details</DialogTitle>
+                <DialogTitle className="text-base font-sans font-semibold">Bill Details</DialogTitle>
                 <div className="flex gap-1 pr-4">
-                  <Button variant="outline" size="icon" className="h-7 w-7 border-indigo-200 hover:border-indigo-400 text-indigo-600 hover:bg-indigo-50"
-                    onClick={() => handleDownloadPDF(selected.id)}
-                    title="Generate Premium PDF / Print"
+                  <Button variant="outline" size="sm" className="h-7 border-indigo-200 hover:border-indigo-400 text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={!canGenerateBill(selected)}
+                    title={!canGenerateBill(selected) ? "Cannot generate bill with 0 total. Set a budget first." : ""}
+                    onClick={() => handleGenerateBill(selected)}
                   >
-                    <Printer className="h-4 w-4" />
+                    <Receipt className="h-4 w-4 mr-1.5" />
+                    Generate
                   </Button>
                   {!isEditing ? (
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditForm(selected); setIsEditing(true); }}>
@@ -248,7 +344,7 @@ export default function Quotations() {
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-muted-foreground">ID</span>
-                    <span className="text-sm font-mono">Q-{String(selected.id).padStart(3, "0")}</span>
+                    <span className="text-sm font-mono">B-{String(selected.id).padStart(3, "0")}</span>
                   </div>
 
                   {isEditing ? (
@@ -337,16 +433,21 @@ export default function Quotations() {
                     </>
                   ) : (
                     <>
-                      <div className="flex justify-between"><span className="text-xs text-muted-foreground">Client Name</span><span className="text-sm font-medium">{selected.name}</span></div>
-                      <div className="flex justify-between"><span className="text-xs text-muted-foreground">Email</span><span className="text-sm break-all text-right">{selected.email}</span></div>
-                      <div className="flex justify-between"><span className="text-xs text-muted-foreground">Phone</span><span className="text-sm">{selected.phone || "-"}</span></div>
-                      <div className="flex justify-between"><span className="text-xs text-muted-foreground">City</span><span className="text-sm">{selected.city || "-"}</span></div>
-                      <div className="flex justify-between"><span className="text-xs text-muted-foreground">Event Type</span><span className="text-sm">{selected.eventType}</span></div>
-                      <div className="flex justify-between"><span className="text-xs text-muted-foreground">Event Date</span><span className="text-sm">{selected.eventDate || "-"}</span></div>
-                      <div className="flex justify-between"><span className="text-xs text-muted-foreground">Venue</span><span className="text-sm">{selected.venue || "-"}</span></div>
-                      <div className="flex justify-between"><span className="text-xs text-muted-foreground">Guest Count</span><span className="text-sm">{selected.guestCount || "-"}</span></div>
-                      <div className="flex justify-between"><span className="text-xs text-muted-foreground">Budget</span><span className="text-sm font-semibold text-primary">{selected.budget || "-"}</span></div>
-                      {selected.gstRate && <div className="flex justify-between"><span className="text-xs text-muted-foreground">GST Rate</span><span className="text-sm font-semibold text-red-500">{selected.gstRate}%</span></div>}
+                      {renderReadOnlyRow("Client Name", selected.name, "text-sm font-medium")}
+                      {renderReadOnlyRow("Email", selected.email, "text-sm break-all text-right")}
+                      {renderReadOnlyRow("Phone", selected.phone)}
+                      {renderReadOnlyRow("City", selected.city)}
+                      {renderReadOnlyRow("Event Type", selected.eventType)}
+                      {renderReadOnlyRow("Event Date", selected.eventDate)}
+                      {renderReadOnlyRow("Venue", selected.venue)}
+                      {renderReadOnlyRow("Guest Count", selected.guestCount)}
+                      {renderReadOnlyRow("Budget", selected.budget, "text-sm font-semibold text-primary")}
+                      {hasValue(selected.gstRate) && (
+                        <div className="flex justify-between">
+                          <span className="text-xs text-muted-foreground">GST Rate</span>
+                          <span className="text-sm font-semibold text-red-500">{selected.gstRate}%</span>
+                        </div>
+                      )}
 
                       {(selected.functions || (Array.isArray(selected.servicesRequested) && selected.servicesRequested.length > 0) || (typeof selected.servicesRequested === 'string' && selected.servicesRequested.length > 0) || selected.requirements) && (
                         <div className="py-2 my-2 border-y border-border/50 space-y-2">
@@ -412,18 +513,6 @@ export default function Quotations() {
                     </>
                   )}
                   <div className="flex justify-between items-center"><span className="text-xs text-muted-foreground">Status</span><Badge variant="outline" className={statusColor[selected.status] || ""}>{selected.status}</Badge></div>
-                </div>
-
-                <div className="flex gap-2 flex-wrap">
-                  {selected.status !== "Contacted" && (
-                    <Button size="sm" className="flex-1" onClick={() => handleStatusChange(selected.id, "Contacted")}>Mark Contacted</Button>
-                  )}
-                  {selected.status !== "Booked" && (
-                    <Button size="sm" variant="secondary" className="flex-1" onClick={() => handleStatusChange(selected.id, "Booked")}>Mark Booked</Button>
-                  )}
-                  {selected.status !== "Closed" && (
-                    <Button size="sm" variant="outline" className="flex-1" onClick={() => handleStatusChange(selected.id, "Closed")}>Close</Button>
-                  )}
                 </div>
               </div>
             </>

@@ -207,6 +207,38 @@ export async function markAllQuotationsAsRead() {
     return res.data;
 }
 
+// ─── Bills ───────────────────────────────────────────────────────────────────
+export interface BillItemPayload {
+    service: string;
+    deliverables?: string;
+    price: number;
+}
+
+export interface CreateBillPayload {
+    quotationId?: number;
+    clientName: string;
+    clientEmail: string;
+    clientPhone?: string;
+    clientAddress?: string;
+    eventType: string;
+    eventDate?: string;
+    items: BillItemPayload[];
+    subtotal?: number;
+    gstRate?: number;
+    taxAmount?: number;
+    totalAmount?: number;
+    advancePaid?: number;
+    balanceAmount?: number;
+    dueDate?: string;
+    status?: "Unpaid" | "Partially Paid" | "Paid" | "Overdue" | "Cancelled";
+    notes?: string;
+}
+
+export async function createBill(data: CreateBillPayload) {
+    const res = await api.post("/bills", data);
+    return res.data;
+}
+
 // ─── Portfolio ────────────────────────────────────────────────────────────────
 export async function getPortfolio(params?: { category?: string; featured?: string }) {
     const res = await api.get("/portfolio", { params });

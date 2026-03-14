@@ -1,0 +1,340 @@
+@page {
+    size: A4;
+    margin: 0;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background: #ffffff;
+    font-family: 'Poppins', sans-serif;
+    color: #333333;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    padding: 0;
+    margin: 0;
+}
+
+.page {
+    width: 210mm;
+    min-height: 297mm;
+    background: #ffffff;
+    padding: 15mm 20mm;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    page-break-after: always;
+    box-sizing: border-box;
+    margin: 0 auto;
+}
+
+/* Top image gallery */
+.image-gallery {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 15px;
+    margin-bottom: 25px;
+    position: relative;
+}
+
+.image-gallery::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: -2px;
+    right: -2px;
+    height: 50px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 120' preserveAspectRatio='none'%3E%3Cpath fill='%23ffffff' d='M0,120 L1200,120 L1200,20 C1000,120 800,0 600,50 C400,100 200,0 0,40 Z'/%3E%3C/svg%3E");
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
+    background-position: bottom;
+    pointer-events: none;
+    z-index: 10;
+}
+
+.cat-img {
+    width: 100%;
+    height: 190px;
+    object-fit: cover;
+    border-radius: 8px 8px 0 0;
+}
+
+/* Main heading */
+.main-heading-container {
+    text-align: center;
+    margin-bottom: 25px;
+}
+
+.main-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 44px;
+    letter-spacing: 12px;
+    color: #b59048; /* Luxury soft gold */
+    font-weight: 600;
+    margin-bottom: 5px;
+    margin-left: 6px;
+    text-transform: uppercase;
+}
+
+.gold-divider {
+    width: 100%;
+    height: 1px;
+    background-color: #d4af37;
+    /* light gold */
+    opacity: 0.6;
+}
+
+/* Client details section */
+.details-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+    margin-bottom: 30px;
+}
+
+.client-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.client-table tr {
+    border-bottom: 1px solid #f0f0f0;
+    /* thin separators */
+}
+
+.client-table td {
+    padding: 6px 0;
+    font-size: 13px;
+}
+
+.client-table .label {
+    width: 45%;
+    font-weight: 500;
+    color: #888888;
+    text-transform: uppercase;
+    font-size: 12px;
+    letter-spacing: 1px;
+}
+
+.client-table .value {
+    color: #333333;
+    font-weight: 500;
+}
+
+.company-block {
+    text-align: right;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.logo-text {
+    font-family: 'Playfair Display', serif;
+    font-size: 32px;
+    color: #2c2c2c;
+    letter-spacing: 2px;
+    margin-bottom: 2px;
+}
+
+.subtitle-text {
+    font-size: 14px;
+    color: #d4af37;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    margin-bottom: 15px;
+}
+
+.company-contact {
+    font-size: 12px;
+    color: #666666;
+    line-height: 1.6;
+}
+
+/* Service Table */
+.services-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 10px;
+}
+
+.services-table thead {
+    background-color: #f8f6f0;
+    /* light beige */
+    border-bottom: 2px solid #b59048;
+}
+
+.services-table th {
+    padding: 12px 10px;
+    font-size: 11px;
+    color: #4a4a4a;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    font-weight: 600;
+}
+
+.services-table th.right {
+    text-align: right;
+}
+
+.services-table th.left {
+    text-align: left;
+}
+
+.services-table th.center {
+    text-align: center;
+}
+
+.services-table td {
+    padding: 12px 10px;
+    font-size: 13px;
+    border-bottom: 1px dashed #dcdcdc;
+    /* Row height about 45px */
+    vertical-align: middle;
+}
+
+.services-table td.col-sr {
+    width: 8%;
+    text-align: center;
+    color: #888;
+}
+
+.services-table td.col-srv {
+    width: 25%;
+    text-align: left;
+    color: #333;
+}
+
+.services-table td.col-del {
+    width: 35%;
+    text-align: left;
+    color: #555;
+}
+
+.services-table td.col-price {
+    width: 16%;
+    text-align: right;
+    color: #555;
+}
+
+.services-table td.col-total {
+    width: 16%;
+    text-align: right;
+    color: #333;
+}
+
+/* Add item row */
+.add-item-row {
+    text-align: center;
+    padding: 12px 0;
+    margin-bottom: 30px;
+}
+
+.add-item-text {
+    font-size: 13px;
+    color: #bbbbbb;
+    font-style: italic;
+    cursor: default;
+}
+
+/* Bottom elements wrapping */
+.bottom-wrapper {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: auto;
+    /* push footer down */
+}
+
+/* Terms */
+.terms-section {
+    width: 50%;
+    padding-right: 30px;
+}
+
+.terms-title {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    color: #333;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+}
+
+.terms-list {
+    list-style-type: disc;
+    padding-left: 15px;
+    font-size: 10px;
+    color: #777;
+    line-height: 1.6;
+}
+
+/* Summary */
+.summary-section {
+    width: 40%;
+}
+
+.summary-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.summary-table td {
+    padding: 8px 10px;
+    font-size: 13px;
+    text-align: right;
+}
+
+.summary-table .s-label {
+    color: #666;
+    width: 60%;
+    font-weight: 500;
+}
+
+.summary-table .s-val {
+    color: #333;
+    width: 40%;
+}
+
+.summary-table tr.total-row td {
+    border-top: 1px solid #d4af37;
+    /* Thin gold line above total */
+    padding-top: 12px;
+}
+
+.summary-table tr.total-row .s-label {
+    font-weight: 700;
+    font-size: 16px;
+    color: #2c2c2c;
+}
+
+.summary-table tr.total-row .s-val {
+    font-weight: 700;
+    font-size: 16px;
+    color: #2c2c2c;
+}
+
+/* Footer Section */
+.footer-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: auto;
+    padding-top: 25px;
+    border-top: 1px solid #eeeeee;
+    font-size: 11px;
+    color: #888888;
+}
+
+.footer-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.f-icon {
+    font-family: sans-serif;
+    font-size: 14px;
+}

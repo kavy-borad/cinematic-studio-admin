@@ -18,6 +18,7 @@ require("./src/models/Client");
 require("./src/models/Testimonial");
 require("./src/models/Setting");
 require("./src/models/ApiLog");
+require("./src/models/Bill");
 
 // Import routes
 const authRoutes = require("./src/routes/auth");
@@ -30,6 +31,7 @@ const testimonialRoutes = require("./src/routes/testimonials");
 const settingsRoutes = require("./src/routes/settings");
 const logsRoutes = require("./src/routes/logs");
 const adminsRoutes = require("./src/routes/admins");
+const billsRoutes = require("./src/routes/bills");
 const apiLogger = require("./src/middleware/apiLogger");
 
 const app = express();
@@ -83,6 +85,7 @@ app.use("/api/testimonials", testimonialRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/logs", logsRoutes);
 app.use("/api/admins", adminsRoutes);
+app.use("/api/bills", billsRoutes);
 // 404 catch-all
 app.use((req, res) => {
     res.status(404).json({ success: false, message: `Route ${req.method} ${req.originalUrl} not found.` });
@@ -97,8 +100,9 @@ async function startServer() {
         await sequelize.authenticate();
         console.log("✅ MySQL connected successfully!");
 
-        // Sync all models (creates tables if not exist; use { force: false } in production)
-        await sequelize.sync({ alter: process.env.NODE_ENV !== "production" });
+        // Keep schema auto-alter opt-in to prevent duplicate index buildup in MySQL.
+        const shouldAlterSchema = process.env.DB_SYNC_ALTER === "true";
+        await sequelize.sync({ alter: shouldAlterSchema });
         console.log("✅ Database tables synced!");
 
         // Seed initial data
