@@ -5,26 +5,46 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Edit2, Eye, Trash2, Loader2, Save, X, Receipt } from "lucide-react";
+import { Edit2, Eye, Trash2, Loader2, Save, X, Receipt, PlusCircle, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { createBill, deleteQuotation, getQuotations, updateQuotation } from "@/lib/api";
+import { createBill, deleteQuotation, getQuotations, updateQuotation, getBills, updateBill, updateBillStatus } from "@/lib/api";
 
 const statusColor: Record<string, string> = {
   New: "bg-blue-500/10 text-blue-500 border-blue-500/20",
   Contacted: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
   Booked: "bg-green-500/10 text-green-500 border-green-500/20",
   Closed: "bg-red-500/10 text-red-500 border-red-500/20",
+  Unpaid: "bg-orange-500/10 text-orange-500 border-orange-500/20",
+  Paid: "bg-green-500/10 text-green-500 border-green-500/20",
 };
 
 export default function Bills() {
+  const [activeTab, setActiveTab] = useState("quotations"); // 'quotations' | 'bills'
   const [quotations, setQuotations] = useState<any[]>([]);
+  const [bills, setBills] = useState<any[]>([]);
   const [selected, setSelected] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editForm, setEditForm] = useState<any>({});
+
+  const [selectedBill, setSelectedBill] = useState<any>(null);
+  const [isBillEditing, setIsBillEditing] = useState(false);
+  const [isBillModalOpen, setIsBillModalOpen] = useState(false);
+  const [editBillForm, setEditBillForm] = useState<any>({});
+
+  // ── Create Bill Manually ────────────────────────────────────────────────────
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const defaultCreateForm = () => ({
+    clientName: '', clientEmail: '', clientPhone: '', clientAddress: '',
+    eventType: '', eventDate: '', dueDate: '', notes: '',
+    gstRate: 18, advancePaid: 0, status: 'Unpaid' as const,
+    items: [{ service: '', deliverables: '', price: '' }],
+  });
+  const [createForm, setCreateForm] = useState<any>(defaultCreateForm());
 
   const hasValue = (value: unknown) => {
     if (value === null || value === undefined) return false;
@@ -163,14 +183,27 @@ export default function Bills() {
       }
     } catch (error) {
       console.error("Failed to load booked quotations:", error);
-    } finally {
-      setLoading(false);
+    }
+  };
+
+  const fetchBills = async () => {
+    try {
+      const res = await getBills();
+      if (res.success) {
+        setBills(res.data);
+      }
+    } catch (error) {
+      console.error("Failed to load unpaid bills:", error);
     }
   };
 
   useEffect(() => {
-    setLoading(true);
-    fetchQuotations();
+    const loadData = async () => {
+      setLoading(true);
+      await Promise.all([fetchQuotations(), fetchBills()]);
+      setLoading(false);
+    };
+    loadData();
   }, []);
 
   const handleEditChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -179,15 +212,67 @@ export default function Bills() {
 
   const handleSaveEdit = async () => {
     try {
-      const res = await updateQuotation(selected.id, editForm);
+      // Strip blank service rows before saving to backend
+      const cleanedForm = { ...editForm };
+      if (Array.isArray(cleanedForm.servicesRequested)) {
+        cleanedForm.servicesRequested = cleanedForm.servicesRequested.filter(
+          (s: string) => typeof s === 'string' && s.trim() !== ''
+        );
+      }
+      const res = await updateQuotation(selected.id, cleanedForm);
       if (res.success) {
-        toast.success("Bill details updated");
+        toast.success("Quotation details updated");
         setIsEditing(false);
-        setQuotations((prev) => prev.map((q) => (q.id === selected.id ? { ...q, ...editForm } : q)));
-        setSelected({ ...selected, ...editForm });
+        setQuotations((prev) => prev.map((q) => (q.id === selected.id ? { ...q, ...cleanedForm } : q)));
+        setSelected({ ...selected, ...cleanedForm });
       }
     } catch (error: any) {
       toast.error(error.response?.data?.message || "Failed to update");
+    }
+  };
+
+  const handleBillEditChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    setEditBillForm({ ...editBillForm, [e.target.name]: e.target.value });
+  };
+
+  const handleSaveBillEdit = async () => {
+    try {
+      const payload: any = {
+        clientName: editBillForm.clientName,
+        clientEmail: editBillForm.clientEmail,
+        clientPhone: editBillForm.clientPhone,
+        eventType: editBillForm.eventType,
+        status: editBillForm.status,
+      };
+
+      if (editBillForm.advancePaid !== undefined) {
+        payload.advancePaid = parseNumber(editBillForm.advancePaid);
+      }
+
+      const res = await updateBill(selectedBill.id, payload);
+      if (res.success) {
+        toast.success("Bill updated successfully");
+        setIsBillEditing(false);
+        setBills((prev) => prev.map((q) => (q.id === selectedBill.id ? res.data : q)));
+        setSelectedBill(res.data);
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || "Failed to update bill");
+    }
+  };
+
+  const handleQuickStatusUpdate = async (billId: number, newStatus: string) => {
+    toast.loading("Updating status...", { id: "status_update" });
+    try {
+      const res = await updateBillStatus(billId, newStatus);
+      if (res.success) {
+        setBills((prev) =>
+          prev.map((b) => (b.id === billId ? { ...b, ...res.data } : b))
+        );
+        toast.success(`Bill status updated to ${newStatus}`, { id: "status_update" });
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || "Failed to update status", { id: "status_update" });
     }
   };
 
@@ -227,6 +312,63 @@ export default function Bills() {
     }
   };
 
+  // ── Manual Bill Creation ─────────────────────────────────────────────────────
+  const computedTotals = (items: any[], gstRate: number) => {
+    const subtotal = items.reduce((s, it) => s + (parseNumber(it.price) || 0), 0);
+    const taxAmount = Number(((subtotal * gstRate) / 100).toFixed(2));
+    const totalAmount = Number((subtotal + taxAmount).toFixed(2));
+    return { subtotal: Number(subtotal.toFixed(2)), taxAmount, totalAmount };
+  };
+
+  const handleCreateBill = async () => {
+    const { clientName, clientEmail, eventType, items, gstRate, advancePaid, status, clientPhone, clientAddress, eventDate, dueDate, notes } = createForm;
+    if (!clientName.trim()) return toast.error('Client name is required.');
+    if (!clientEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(clientEmail)) return toast.error('Valid client email is required.');
+    if (!eventType.trim()) return toast.error('Event type is required.');
+    const validItems = items.filter((it: any) => it.service.trim() && parseNumber(it.price) > 0);
+    if (validItems.length === 0) return toast.error('At least one item with a service name and price > 0 is required.');
+
+    const { subtotal, taxAmount, totalAmount } = computedTotals(validItems, Number(gstRate) || 18);
+    const finalAdvance = parseNumber(advancePaid) || 0;
+    const balanceAmount = Number((totalAmount - finalAdvance).toFixed(2));
+
+    setIsCreating(true);
+    try {
+      const payload = {
+        clientName: clientName.trim(),
+        clientEmail: clientEmail.trim().toLowerCase(),
+        clientPhone: clientPhone?.trim() || undefined,
+        clientAddress: clientAddress?.trim() || undefined,
+        eventType: eventType.trim(),
+        eventDate: eventDate || undefined,
+        dueDate: dueDate || undefined,
+        notes: notes?.trim() || undefined,
+        items: validItems.map((it: any) => ({
+          service: it.service.trim(),
+          deliverables: it.deliverables?.trim() || '',
+          price: parseNumber(it.price),
+        })),
+        subtotal, gstRate: Number(gstRate) || 18, taxAmount, totalAmount,
+        advancePaid: finalAdvance, balanceAmount,
+        status,
+      };
+      const res = await createBill(payload);
+      if (res?.success) {
+        toast.success(`Bill created: ${res.data?.invoiceNumber || ''}`);
+        setIsCreateModalOpen(false);
+        setCreateForm(defaultCreateForm());
+        await fetchBills();
+        setActiveTab('bills');
+      } else {
+        toast.error(res?.message || 'Failed to create bill.');
+      }
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to create bill.');
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
   if (loading) {
     return (
       <>
@@ -240,6 +382,41 @@ export default function Bills() {
     <>
       <Header title="Bills" subtitle="Manage and generate bills for booked quotations" />
       <div className="p-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="flex bg-muted/30 p-1 rounded-lg w-fit">
+            <button
+              onClick={() => setActiveTab("quotations")}
+              className={`px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
+                activeTab === "quotations"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Pending Quotations
+            </button>
+            <button
+              onClick={() => setActiveTab("bills")}
+              className={`px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
+                activeTab === "bills"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              All Bills
+            </button>
+          </div>
+
+          {/* ── Create Bill Manually button */}
+          <Button
+            size="sm"
+            className="gap-1.5 h-9"
+            onClick={() => { setCreateForm(defaultCreateForm()); setIsCreateModalOpen(true); }}
+          >
+            <Plus className="h-4 w-4" />
+            Create Bill
+          </Button>
+        </div>
+
         <div className="grid grid-cols-1 gap-6">
           <Card className="glass-card">
             <CardContent className="p-0">
@@ -249,11 +426,12 @@ export default function Bills() {
                     <TableHead className="text-muted-foreground">ID</TableHead>
                     <TableHead className="text-muted-foreground">Client</TableHead>
                     <TableHead className="text-muted-foreground">Event</TableHead>
-                    <TableHead className="text-muted-foreground">Budget</TableHead>
+                    <TableHead className="text-muted-foreground">{activeTab === "bills" ? "Amount" : "Budget"}</TableHead>
                     <TableHead className="text-muted-foreground">Status</TableHead>
                     <TableHead className="text-muted-foreground text-right pr-6">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
+                {activeTab === "quotations" ? (
                 <TableBody>
                   {quotations.length > 0 ? quotations.map((q) => (
                     <TableRow
@@ -301,6 +479,62 @@ export default function Bills() {
                     </TableRow>
                   )}
                 </TableBody>
+              ) : (
+                <TableBody>
+                  {bills.length > 0 ? bills.map((b) => (
+                    <TableRow
+                      key={b.id}
+                      className="border-border/50 transition-colors hover:bg-muted/20"
+                    >
+                      <TableCell className="font-mono text-xs text-muted-foreground">
+                        {b.invoiceNumber}
+                      </TableCell>
+                      <TableCell className="font-medium">{b.clientName}</TableCell>
+                      <TableCell className="text-sm">{b.eventType}</TableCell>
+                      <TableCell className="font-semibold text-primary">₹{b.totalAmount || "0"}</TableCell>
+                      <TableCell>
+                        <select
+                          value={b.status || ""}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            handleQuickStatusUpdate(b.id, e.target.value);
+                          }}
+                          className={`flex h-7 w-[130px] rounded-md border text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 px-2 py-1 cursor-pointer font-medium ${
+                            b.status === "Paid" ? "bg-green-500/10 text-green-600 border-green-500/20" :
+                            b.status === "Unpaid" ? "bg-orange-500/10 text-orange-600 border-orange-500/20" :
+                            b.status === "Partially Paid" ? "bg-yellow-500/10 text-yellow-600 border-yellow-500/20" :
+                            b.status === "Overdue" ? "bg-red-500/10 text-red-600 border-red-500/20" :
+                            b.status === "Cancelled" ? "bg-gray-500/10 text-gray-600 border-gray-500/20" : ""
+                          }`}
+                        >
+                          <option value="Unpaid" className="text-foreground bg-background">Unpaid</option>
+                          <option value="Partially Paid" className="text-foreground bg-background">Partially Paid</option>
+                          <option value="Paid" className="text-foreground bg-background">Paid</option>
+                          <option value="Overdue" className="text-foreground bg-background">Overdue</option>
+                          <option value="Cancelled" className="text-foreground bg-background">Cancelled</option>
+                        </select>
+                      </TableCell>
+                      <TableCell className="text-right pr-6">
+                        <div className="flex gap-2 justify-end">
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedBill(b);
+                            setEditBillForm(b);
+                            setIsBillEditing(false);
+                            setIsBillModalOpen(true);
+                          }}>
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )) : (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center text-muted-foreground py-8">No bills found</TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              )}
               </Table>
             </CardContent>
           </Card>
@@ -313,7 +547,7 @@ export default function Bills() {
           {selected && (
             <>
               <DialogHeader className="flex flex-row items-center justify-between border-b border-border/50 pb-3 -mt-2 space-y-0 text-left">
-                <DialogTitle className="text-base font-sans font-semibold">Bill Details</DialogTitle>
+                <DialogTitle className="text-base font-sans font-semibold">Pending Quotation Details</DialogTitle>
                 <div className="flex gap-1 pr-4">
                   <Button variant="outline" size="sm" className="h-7 border-indigo-200 hover:border-indigo-400 text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={!canGenerateBill(selected)}
@@ -360,6 +594,7 @@ export default function Bills() {
                       <div className="grid grid-cols-3 gap-2 items-center"><span className="text-xs text-muted-foreground items-start pt-1">Functions</span><Textarea name="functions" value={editForm.functions || ""} onChange={handleEditChange} className="col-span-2 text-sm min-h-[60px]" /></div>
                       
                       {(() => {
+                        // Parse current services & descriptions from editForm
                         let srvs: string[] = [];
                         if (Array.isArray(editForm.servicesRequested)) {
                           srvs = editForm.servicesRequested;
@@ -375,7 +610,7 @@ export default function Bills() {
                           }
                         }
 
-                        let reqs: any = {};
+                        let reqs: Record<string, string> = {};
                         if (editForm.requirements) {
                           try {
                             if (editForm.requirements.startsWith('{')) {
@@ -388,42 +623,94 @@ export default function Bills() {
                           }
                         }
 
+                        // Build working rows list including blank new rows
+                        const rows = srvs.map(srv => ({ service: srv, description: reqs[srv] || '' }));
+
+                        const commitRows = (updated: { service: string; description: string }[]) => {
+                          const newReqs: Record<string, string> = {};
+                          updated.forEach(r => { if (r.service.trim()) newReqs[r.service.trim()] = r.description; });
+                          setEditForm((prev: any) => ({
+                            ...prev,
+                            servicesRequested: updated.map(r => r.service), // keep blanks so new rows stay
+                            requirements: JSON.stringify(newReqs),
+                          }));
+                        };
+
+                        const handleServiceNameChange = (idx: number, val: string) => {
+                          commitRows(rows.map((r, i) => i === idx ? { ...r, service: val } : r));
+                        };
+
+                        const handleDescChange = (idx: number, val: string) => {
+                          commitRows(rows.map((r, i) => i === idx ? { ...r, description: val } : r));
+                        };
+
+                        const addRow = () => commitRows([...rows, { service: '', description: '' }]);
+                        const removeRow = (idx: number) => commitRows(rows.filter((_, i) => i !== idx));
+
                         return (
-                          <div className="col-span-3 border border-border/50 rounded-md p-3 space-y-4 bg-muted/5 mt-2">
-                            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block border-b border-border/30 pb-2">Services & Descriptions</span>
-                            
-                            <div className="space-y-3 pt-1">
-                              {srvs.length === 0 ? (
-                                <span className="text-xs text-muted-foreground italic">No services added yet.</span>
-                              ) : (
-                                srvs.map((srv, idx) => (
-                                  <div key={idx} className="grid grid-cols-3 gap-2 items-start">
-                                    <span className="text-xs font-semibold text-foreground text-right pt-2 pr-1">{srv}</span>
-                                    <Textarea
-                                      value={reqs[srv] || ""}
-                                      onChange={(e) => {
-                                        const newReqs = { ...reqs, [srv]: e.target.value };
-                                        setEditForm({ ...editForm, requirements: JSON.stringify(newReqs) });
-                                      }}
-                                      placeholder={`Descriptions for ${srv}...`}
-                                      className="col-span-2 text-sm min-h-[60px] bg-background"
-                                    />
-                                  </div>
-                                ))
-                              )}
+                          <div className="col-span-3 border border-border/50 rounded-md p-3 space-y-3 bg-muted/5 mt-2">
+                            {/* Header */}
+                            <div className="flex items-center justify-between border-b border-border/30 pb-2">
+                              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                                Services &amp; Descriptions
+                              </span>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs text-primary hover:text-primary/80 hover:bg-primary/10 gap-1"
+                                onClick={addRow}
+                              >
+                                <PlusCircle className="h-3.5 w-3.5" />
+                                Add Service
+                              </Button>
                             </div>
 
-                            <div className="grid grid-cols-3 gap-2 items-center pt-3 border-t border-border/30">
-                              <span className="text-xs text-muted-foreground">Edit Services<br/><span className="text-[10px]">(Comma separated)</span></span>
-                              <Input 
-                                value={typeof editForm.servicesRequested === 'string' && editForm.servicesRequested.startsWith('[') ? srvs.join(', ') : (Array.isArray(editForm.servicesRequested) ? editForm.servicesRequested.join(', ') : (editForm.servicesRequested || ""))}
-                                onChange={(e) => {
-                                  setEditForm({ ...editForm, servicesRequested: e.target.value.split(',').map(s => s.trim()) });
-                                }}
-                                className="col-span-2 h-8 text-sm bg-background"
-                                placeholder="Photography, Cinematic Video"
-                              />
-                            </div>
+                            {/* Rows */}
+                            {rows.length === 0 ? (
+                              <div className="flex flex-col items-center gap-2 py-3 text-center">
+                                <span className="text-xs text-muted-foreground italic">No services added yet.</span>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 px-3 text-xs gap-1 border-dashed border-primary/40 text-primary hover:bg-primary/5"
+                                  onClick={addRow}
+                                >
+                                  <PlusCircle className="h-3.5 w-3.5" />
+                                  Add First Service
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="space-y-2.5">
+                                {rows.map((row, idx) => (
+                                  <div key={idx} className="flex gap-2 items-start group">
+                                    <Input
+                                      value={row.service}
+                                      onChange={(e) => handleServiceNameChange(idx, e.target.value)}
+                                      placeholder="Service name"
+                                      className="w-28 flex-shrink-0 h-8 text-xs font-semibold bg-background"
+                                    />
+                                    <Textarea
+                                      value={row.description}
+                                      onChange={(e) => handleDescChange(idx, e.target.value)}
+                                      placeholder={`Description for ${row.service || 'this service'}...`}
+                                      className="flex-1 text-sm min-h-[60px] bg-background resize-none"
+                                    />
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 flex-shrink-0 text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                                      onClick={() => removeRow(idx)}
+                                      title="Remove this service"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         );
                       })()}
@@ -517,6 +804,267 @@ export default function Bills() {
               </div>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Actual Bill Details Modal */}
+      <Dialog open={isBillModalOpen} onOpenChange={(open) => { setIsBillModalOpen(open); if (!open) setIsBillEditing(false); }}>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+          {selectedBill && (
+            <>
+              <DialogHeader className="flex flex-row items-center justify-between border-b border-border/50 pb-3 -mt-2 space-y-0 text-left">
+                <DialogTitle className="text-base font-sans font-semibold">Generated Bill Invoice</DialogTitle>
+                <div className="flex gap-1 pr-4">
+                  {!isBillEditing ? (
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditBillForm(selectedBill); setIsBillEditing(true); }}>
+                      <Edit2 className="h-4 w-4" />
+                    </Button>
+                  ) : (
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600" onClick={handleSaveBillEdit}>
+                        <Save className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setIsBillEditing(false)}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </DialogHeader>
+
+              <div className="space-y-4 pt-2">
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-muted-foreground">Invoice No.</span>
+                    <span className="text-sm font-mono">{selectedBill.invoiceNumber}</span>
+                  </div>
+
+                  {isBillEditing ? (
+                    <>
+                      <div className="grid grid-cols-3 gap-2 items-center"><span className="text-xs text-muted-foreground">Client Name</span><Input name="clientName" value={editBillForm.clientName || ""} onChange={handleBillEditChange} className="col-span-2 h-7 text-sm" /></div>
+                      <div className="grid grid-cols-3 gap-2 items-center"><span className="text-xs text-muted-foreground">Advance Paid (₹)</span><Input name="advancePaid" type="number" value={editBillForm.advancePaid || ""} onChange={handleBillEditChange} className="col-span-2 h-7 text-sm" /></div>
+                      <div className="grid grid-cols-3 gap-2 items-center"><span className="text-xs text-muted-foreground">Status</span>
+                        <select name="status" value={editBillForm.status || ""} onChange={handleBillEditChange as any} className="col-span-2 flex h-7 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50">
+                          <option value="Unpaid">Unpaid</option>
+                          <option value="Partially Paid">Partially Paid</option>
+                          <option value="Paid">Paid</option>
+                          <option value="Overdue">Overdue</option>
+                          <option value="Cancelled">Cancelled</option>
+                        </select>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {renderReadOnlyRow("Client Name", selectedBill.clientName, "text-sm font-medium")}
+                      {renderReadOnlyRow("Email", selectedBill.clientEmail, "text-sm break-all text-right")}
+                      {renderReadOnlyRow("Phone", selectedBill.clientPhone)}
+                      {renderReadOnlyRow("Event Type", selectedBill.eventType)}
+                      
+                      <div className="py-2 border-y border-border/50 my-2 space-y-2">
+                        {renderReadOnlyRow("Subtotal", "₹" + selectedBill.subtotal)}
+                        {renderReadOnlyRow(`Tax (${selectedBill.gstRate}%)`, "₹" + selectedBill.taxAmount)}
+                        {renderReadOnlyRow("Total Amount", "₹" + selectedBill.totalAmount, "text-sm font-semibold")}
+                        {renderReadOnlyRow("Advance Paid", "₹" + selectedBill.advancePaid, "text-sm font-semibold text-green-600")}
+                        {renderReadOnlyRow("Balance Due", "₹" + selectedBill.balanceAmount, "text-sm font-semibold text-red-500")}
+                      </div>
+
+                      {Array.isArray(selectedBill.items) && selectedBill.items.length > 0 && (
+                        <div>
+                           <span className="text-xs text-muted-foreground block mb-1">Items</span>
+                           <div className="space-y-2">
+                             {selectedBill.items.map((item: any, i: number) => (
+                               <div key={i} className="flex justify-between items-start text-xs border border-border/30 p-2 rounded bg-muted/10">
+                                 <div>
+                                   <div className="font-medium text-foreground">{item.service}</div>
+                                   {item.deliverables && <div className="text-muted-foreground mt-0.5 line-clamp-2" title={item.deliverables}>{item.deliverables}</div>}
+                                 </div>
+                                 <div className="font-medium whitespace-nowrap pl-2 text-primary">₹{item.price}</div>
+                               </div>
+                             ))}
+                           </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  <div className="flex justify-between items-center"><span className="text-xs text-muted-foreground">Status</span><Badge variant="outline" className={statusColor[selectedBill.status] || ""}>{selectedBill.status}</Badge></div>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ────── Create Bill Manually Dialog ───────────────────────────── */}
+      <Dialog open={isCreateModalOpen} onOpenChange={(open) => { setIsCreateModalOpen(open); if (!open) setCreateForm(defaultCreateForm()); }}>
+        <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto">
+          <DialogHeader className="border-b border-border/50 pb-3 -mt-2">
+            <DialogTitle className="text-base font-semibold">Create Bill Manually</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-5 pt-2">
+            {/* Client Info */}
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Client Information</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Client Name *</label>
+                  <Input value={createForm.clientName} onChange={e => setCreateForm((p: any) => ({ ...p, clientName: e.target.value }))} placeholder="e.g. Priya Sharma" className="h-8 text-sm" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Email *</label>
+                  <Input type="email" value={createForm.clientEmail} onChange={e => setCreateForm((p: any) => ({ ...p, clientEmail: e.target.value }))} placeholder="client@email.com" className="h-8 text-sm" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Phone</label>
+                  <Input value={createForm.clientPhone} onChange={e => setCreateForm((p: any) => ({ ...p, clientPhone: e.target.value }))} placeholder="+91 98765 43210" className="h-8 text-sm" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">City / Address</label>
+                  <Input value={createForm.clientAddress} onChange={e => setCreateForm((p: any) => ({ ...p, clientAddress: e.target.value }))} placeholder="Delhi" className="h-8 text-sm" />
+                </div>
+              </div>
+            </div>
+
+            {/* Event Info */}
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Event Details</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Event Type *</label>
+                  <Input value={createForm.eventType} onChange={e => setCreateForm((p: any) => ({ ...p, eventType: e.target.value }))} placeholder="Wedding Photography" className="h-8 text-sm" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Event Date</label>
+                  <Input type="date" value={createForm.eventDate} onChange={e => setCreateForm((p: any) => ({ ...p, eventDate: e.target.value }))} className="h-8 text-sm" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Due Date</label>
+                  <Input type="date" value={createForm.dueDate} onChange={e => setCreateForm((p: any) => ({ ...p, dueDate: e.target.value }))} className="h-8 text-sm" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Status</label>
+                  <select value={createForm.status} onChange={e => setCreateForm((p: any) => ({ ...p, status: e.target.value }))} className="flex h-8 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+                    <option value="Unpaid">Unpaid</option>
+                    <option value="Partially Paid">Partially Paid</option>
+                    <option value="Paid">Paid</option>
+                    <option value="Overdue">Overdue</option>
+                    <option value="Cancelled">Cancelled</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Items */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Services / Items *</p>
+                <Button
+                  type="button" variant="ghost" size="sm"
+                  className="h-7 px-2 text-xs text-primary hover:bg-primary/10 gap-1"
+                  onClick={() => setCreateForm((p: any) => ({ ...p, items: [...p.items, { service: '', deliverables: '', price: '' }] }))}
+                >
+                  <PlusCircle className="h-3.5 w-3.5" />
+                  Add Item
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                {/* Column headers */}
+                <div className="grid grid-cols-[1fr_2fr_90px_32px] gap-2 px-1">
+                  <span className="text-[10px] font-medium text-muted-foreground uppercase">Service Name</span>
+                  <span className="text-[10px] font-medium text-muted-foreground uppercase">Description / Deliverables</span>
+                  <span className="text-[10px] font-medium text-muted-foreground uppercase">Price (₹)</span>
+                  <span></span>
+                </div>
+
+                {createForm.items.map((item: any, idx: number) => (
+                  <div key={idx} className="grid grid-cols-[1fr_2fr_90px_32px] gap-2 items-start group">
+                    <Input
+                      value={item.service}
+                      onChange={e => setCreateForm((p: any) => { const items = [...p.items]; items[idx] = { ...items[idx], service: e.target.value }; return { ...p, items }; })}
+                      placeholder="e.g. Photography"
+                      className="h-8 text-sm"
+                    />
+                    <Textarea
+                      value={item.deliverables}
+                      onChange={e => setCreateForm((p: any) => { const items = [...p.items]; items[idx] = { ...items[idx], deliverables: e.target.value }; return { ...p, items }; })}
+                      placeholder="Deliverables or description..."
+                      className="min-h-[32px] h-8 text-sm resize-none py-1.5"
+                    />
+                    <Input
+                      type="number"
+                      value={item.price}
+                      onChange={e => setCreateForm((p: any) => { const items = [...p.items]; items[idx] = { ...items[idx], price: e.target.value }; return { ...p, items }; })}
+                      placeholder="0"
+                      min="0"
+                      className="h-8 text-sm"
+                    />
+                    <Button
+                      type="button" variant="ghost" size="icon"
+                      className="h-8 w-8 text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={() => setCreateForm((p: any) => ({ ...p, items: p.items.filter((_: any, i: number) => i !== idx) }))}
+                      disabled={createForm.items.length === 1}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Financials summary + GST + advance */}
+            {(() => {
+              const { subtotal, taxAmount, totalAmount } = computedTotals(
+                createForm.items.filter((it: any) => it.service.trim() && parseNumber(it.price) > 0),
+                Number(createForm.gstRate) || 18
+              );
+              const balance = Number((totalAmount - (parseNumber(createForm.advancePaid) || 0)).toFixed(2));
+              return (
+                <div className="space-y-3 bg-muted/10 rounded-md p-3 border border-border/40">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">GST Rate (%)</label>
+                      <Input type="number" value={createForm.gstRate} onChange={e => setCreateForm((p: any) => ({ ...p, gstRate: e.target.value }))} min="0" max="100" className="h-8 text-sm" />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Advance Paid (₹)</label>
+                      <Input type="number" value={createForm.advancePaid} onChange={e => setCreateForm((p: any) => ({ ...p, advancePaid: e.target.value }))} min="0" className="h-8 text-sm" />
+                    </div>
+                  </div>
+                  <div className="space-y-1 border-t border-border/30 pt-2">
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Subtotal</span><span className="font-medium text-foreground">₹{subtotal.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Tax ({createForm.gstRate || 18}% GST)</span><span className="font-medium text-foreground">₹{taxAmount.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex justify-between text-sm font-semibold">
+                      <span>Total</span><span className="text-primary">₹{totalAmount.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-muted-foreground">Balance Due</span>
+                      <span className={`font-semibold ${balance > 0 ? 'text-red-500' : 'text-green-500'}`}>₹{balance.toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Notes */}
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Notes (optional)</label>
+              <Textarea value={createForm.notes} onChange={e => setCreateForm((p: any) => ({ ...p, notes: e.target.value }))} placeholder="Any additional notes for this bill..." className="text-sm min-h-[60px]" />
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex justify-end gap-2 pt-2 border-t border-border/30">
+              <Button variant="outline" size="sm" onClick={() => { setIsCreateModalOpen(false); setCreateForm(defaultCreateForm()); }}>Cancel</Button>
+              <Button size="sm" onClick={handleCreateBill} disabled={isCreating} className="gap-1.5">
+                {isCreating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Receipt className="h-4 w-4" />}
+                {isCreating ? 'Creating...' : 'Create Bill'}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </>

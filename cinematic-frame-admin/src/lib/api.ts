@@ -239,6 +239,22 @@ export async function createBill(data: CreateBillPayload) {
     return res.data;
 }
 
+export async function getBills(status?: string) {
+    const params = status && status !== "All" ? { status } : {};
+    const res = await api.get("/bills", { params });
+    return res.data;
+}
+
+export async function updateBill(id: number, data: Partial<CreateBillPayload>) {
+    const res = await api.put(`/bills/${id}`, data);
+    return res.data;
+}
+
+export async function updateBillStatus(id: number, status: string) {
+    const res = await api.patch(`/bills/${id}/status`, { status });
+    return res.data;
+}
+
 // ─── Portfolio ────────────────────────────────────────────────────────────────
 export async function getPortfolio(params?: { category?: string; featured?: string }) {
     const res = await api.get("/portfolio", { params });

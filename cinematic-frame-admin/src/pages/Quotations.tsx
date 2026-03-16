@@ -5,13 +5,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Eye, Trash2, Loader2, Edit2, Save, X, Printer } from "lucide-react";
+import { Eye, Trash2, Loader2, Edit2, Save, X, Printer, PlusCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useNotificationStore } from "@/store/notifications";
 import { useNavigate } from "react-router-dom";
-import api, { API_URL, getQuotations, updateQuotationStatus, deleteQuotation, updateQuotation, markQuotationAsRead } from "@/lib/api";
+import api, { getQuotations, updateQuotationStatus, deleteQuotation, updateQuotation, markQuotationAsRead } from "@/lib/api";
 
 const statusColor: Record<string, string> = {
   New: "bg-blue-500/10 text-blue-500 border-blue-500/20",
@@ -68,12 +68,19 @@ export default function Quotations() {
 
   const handleSaveEdit = async () => {
     try {
-      const res = await updateQuotation(selected.id, editForm);
+      // Strip out blank service rows before saving to backend.
+      const cleanedForm = { ...editForm };
+      if (Array.isArray(cleanedForm.servicesRequested)) {
+        cleanedForm.servicesRequested = cleanedForm.servicesRequested.filter(
+          (s: string) => typeof s === 'string' && s.trim() !== ''
+        );
+      }
+      const res = await updateQuotation(selected.id, cleanedForm);
       if (res.success) {
         toast.success("Quotation updated");
         setIsEditing(false);
-        setQuotations((prev) => prev.map((q) => (q.id === selected.id ? { ...q, ...editForm } : q)));
-        setSelected({ ...selected, ...editForm });
+        setQuotations((prev) => prev.map((q) => (q.id === selected.id ? { ...q, ...cleanedForm } : q)));
+        setSelected({ ...selected, ...cleanedForm });
       }
     } catch (error: any) {
       toast.error(error.response?.data?.message || "Failed to update");
@@ -264,6 +271,7 @@ export default function Quotations() {
                       <div className="grid grid-cols-3 gap-2 items-center"><span className="text-xs text-muted-foreground items-start pt-1">Functions</span><Textarea name="functions" value={editForm.functions || ""} onChange={handleEditChange} className="col-span-2 text-sm min-h-[60px]" /></div>
                       
                       {(() => {
+                        // Parse current services & descriptions from editForm
                         let srvs: string[] = [];
                         if (Array.isArray(editForm.servicesRequested)) {
                           srvs = editForm.servicesRequested;
@@ -279,7 +287,7 @@ export default function Quotations() {
                           }
                         }
 
-                        let reqs: any = {};
+                        let reqs: Record<string, string> = {};
                         if (editForm.requirements) {
                           try {
                             if (editForm.requirements.startsWith('{')) {
@@ -292,42 +300,104 @@ export default function Quotations() {
                           }
                         }
 
+                        // Build a working list: [{service, description}]
+                        const rows = srvs.map(srv => ({ service: srv, description: reqs[srv] || '' }));
+
+                        const commitRows = (updated: { service: string; description: string }[]) => {
+                          // Keep ALL rows including empty ones so new blank rows stay visible.
+                          // Only build the filtered requirements for non-empty service names.
+                          const newReqs: Record<string, string> = {};
+                          updated.forEach(r => { if (r.service.trim()) newReqs[r.service.trim()] = r.description; });
+                          setEditForm((prev: any) => ({
+                            ...prev,
+                            // Store the full row list (including blanks) so the UI stays in sync.
+                            servicesRequested: updated.map(r => r.service),
+                            requirements: JSON.stringify(newReqs),
+                          }));
+                        };
+
+                        const handleServiceNameChange = (idx: number, val: string) => {
+                          const updated = rows.map((r, i) => i === idx ? { ...r, service: val } : r);
+                          commitRows(updated);
+                        };
+
+                        const handleDescChange = (idx: number, val: string) => {
+                          const updated = rows.map((r, i) => i === idx ? { ...r, description: val } : r);
+                          commitRows(updated);
+                        };
+
+                        const addRow = () => {
+                          commitRows([...rows, { service: '', description: '' }]);
+                        };
+
+                        const removeRow = (idx: number) => {
+                          commitRows(rows.filter((_, i) => i !== idx));
+                        };
+
                         return (
-                          <div className="col-span-3 border border-border/50 rounded-md p-3 space-y-4 bg-muted/5 mt-2">
-                            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block border-b border-border/30 pb-2">Services & Descriptions</span>
-                            
-                            <div className="space-y-3 pt-1">
-                              {srvs.length === 0 ? (
-                                <span className="text-xs text-muted-foreground italic">No services added yet.</span>
-                              ) : (
-                                srvs.map((srv, idx) => (
-                                  <div key={idx} className="grid grid-cols-3 gap-2 items-start">
-                                    <span className="text-xs font-semibold text-foreground text-right pt-2 pr-1">{srv}</span>
-                                    <Textarea
-                                      value={reqs[srv] || ""}
-                                      onChange={(e) => {
-                                        const newReqs = { ...reqs, [srv]: e.target.value };
-                                        setEditForm({ ...editForm, requirements: JSON.stringify(newReqs) });
-                                      }}
-                                      placeholder={`Descriptions for ${srv}...`}
-                                      className="col-span-2 text-sm min-h-[60px] bg-background"
-                                    />
-                                  </div>
-                                ))
-                              )}
+                          <div className="col-span-3 border border-border/50 rounded-md p-3 space-y-3 bg-muted/5 mt-2">
+                            {/* Header */}
+                            <div className="flex items-center justify-between border-b border-border/30 pb-2">
+                              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                                Services &amp; Descriptions
+                              </span>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs text-primary hover:text-primary/80 hover:bg-primary/10 gap-1"
+                                onClick={addRow}
+                              >
+                                <PlusCircle className="h-3.5 w-3.5" />
+                                Add Service
+                              </Button>
                             </div>
 
-                            <div className="grid grid-cols-3 gap-2 items-center pt-3 border-t border-border/30">
-                              <span className="text-xs text-muted-foreground">Edit Services<br/><span className="text-[10px]">(Comma separated)</span></span>
-                              <Input 
-                                value={typeof editForm.servicesRequested === 'string' && editForm.servicesRequested.startsWith('[') ? srvs.join(', ') : (Array.isArray(editForm.servicesRequested) ? editForm.servicesRequested.join(', ') : (editForm.servicesRequested || ""))}
-                                onChange={(e) => {
-                                  setEditForm({ ...editForm, servicesRequested: e.target.value.split(',').map(s => s.trim()) });
-                                }}
-                                className="col-span-2 h-8 text-sm bg-background"
-                                placeholder="Photography, Cinematic Video"
-                              />
-                            </div>
+                            {/* Rows */}
+                            {rows.length === 0 ? (
+                              <div className="flex flex-col items-center gap-2 py-3 text-center">
+                                <span className="text-xs text-muted-foreground italic">No services added yet.</span>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 px-3 text-xs gap-1 border-dashed border-primary/40 text-primary hover:bg-primary/5"
+                                  onClick={addRow}
+                                >
+                                  <PlusCircle className="h-3.5 w-3.5" />
+                                  Add First Service
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="space-y-2.5">
+                                {rows.map((row, idx) => (
+                                  <div key={idx} className="flex gap-2 items-start group">
+                                    <Input
+                                      value={row.service}
+                                      onChange={(e) => handleServiceNameChange(idx, e.target.value)}
+                                      placeholder="Service name"
+                                      className="w-28 flex-shrink-0 h-8 text-xs font-semibold bg-background"
+                                    />
+                                    <Textarea
+                                      value={row.description}
+                                      onChange={(e) => handleDescChange(idx, e.target.value)}
+                                      placeholder={`Description for ${row.service || 'this service'}...`}
+                                      className="flex-1 text-sm min-h-[60px] bg-background resize-none"
+                                    />
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 flex-shrink-0 text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                                      onClick={() => removeRow(idx)}
+                                      title="Remove this service"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         );
                       })()}

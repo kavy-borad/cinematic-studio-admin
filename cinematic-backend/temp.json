@@ -1,0 +1,25 @@
+[
+  {
+    "id": 2,
+    "invoiceNumber": "INV-002",
+    "quotationId": null,
+    "clientName": "cv",
+    "clientEmail": "client@gmail.com",
+    "clientPhone": "7454589856",
+    "clientAddress": "delhi",
+    "eventType": "wedding",
+    "eventDate": "2026-03-27",
+    "items": "[{\"service\":\"sd\",\"deliverables\":\"dddddddddddddddddddddddddddddd\",\"price\":5555},{\"service\":\"dded\",\"deliverables\":\"eeeeeeeeeeeeeeeeeee\",\"price\":4530}]",
+    "subtotal": "10085.00",
+    "gstRate": "18.00",
+    "taxAmount": "1815.30",
+    "totalAmount": "11900.30",
+    "advancePaid": "4500.00",
+    "balanceAmount": "7400.30",
+    "dueDate": "2026-04-10",
+    "status": "Paid",
+    "notes": "dffffdffdf",
+    "createdAt": "2026-03-16T18:30:56.000Z",
+    "updatedAt": "2026-03-16T18:30:56.000Z"
+  }
+]

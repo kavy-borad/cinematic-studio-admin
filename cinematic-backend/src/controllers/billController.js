@@ -201,3 +201,179 @@ exports.createBill = async (req, res) => {
         return res.status(500).json({ success: false, message: error.message });
     }
 };
+
+// GET /api/bills
+// Supports optional status filter.
+exports.getBills = async (req, res) => {
+    try {
+        const { status } = req.query;
+        let whereCondition = {};
+        
+        if (status) {
+            whereCondition.status = status;
+        }
+
+        const bills = await Bill.findAll({
+            where: whereCondition,
+            order: [["id", "DESC"]]
+        });
+
+        res.status(200).json({
+            success: true,
+            count: bills.length,
+            data: bills.map(mapBillResponse)
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// PUT /api/bills/:id
+exports.updateBill = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const {
+            clientName,
+            clientEmail,
+            clientPhone,
+            clientAddress,
+            eventType,
+            eventDate,
+            items,
+            subtotal,
+            gstRate,
+            taxAmount,
+            totalAmount,
+            advancePaid,
+            dueDate,
+            status,
+            notes,
+        } = req.body;
+
+        const bill = await Bill.findByPk(id);
+        if (!bill) {
+            return res.status(404).json({ success: false, message: "Bill not found." });
+        }
+
+        // Handle simple string/date fields
+        if (clientName !== undefined) bill.clientName = clientName.trim() || bill.clientName;
+        if (clientEmail !== undefined) {
+            const email = clientEmail.trim().toLowerCase();
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+                return res.status(400).json({ success: false, message: "A valid clientEmail is required." });
+            }
+            bill.clientEmail = email;
+        }
+        if (clientPhone !== undefined) bill.clientPhone = clientPhone.trim();
+        if (clientAddress !== undefined) bill.clientAddress = clientAddress.trim();
+        if (eventType !== undefined) bill.eventType = eventType.trim();
+        if (eventDate !== undefined) {
+            if (!isValidDateInput(eventDate)) return res.status(400).json({ success: false, message: "eventDate must be a valid date." });
+            bill.eventDate = eventDate;
+        }
+        if (dueDate !== undefined) {
+            if (!isValidDateInput(dueDate)) return res.status(400).json({ success: false, message: "dueDate must be a valid date." });
+            bill.dueDate = dueDate;
+        }
+        if (notes !== undefined) bill.notes = notes.trim();
+
+        if (status !== undefined) {
+            const finalStatus = status.trim();
+            if (!VALID_STATUSES.includes(finalStatus)) {
+                return res.status(400).json({ success: false, message: `Invalid status. Must be one of: ${VALID_STATUSES.join(", ")}` });
+            }
+            bill.status = finalStatus;
+        }
+
+        // Handle items and financials
+        if (items !== undefined) {
+            if (!Array.isArray(items) || items.length === 0) {
+                return res.status(400).json({ success: false, message: "items must be a non-empty array." });
+            }
+            bill.items = items.map((item, index) => {
+                const service = String(item?.service || "").trim();
+                const deliverables = String(item?.deliverables || "").trim();
+                const price = toMoney(item?.price, `items[${index}].price`);
+                if (!service) throw new Error(`items[${index}].service is required.`);
+                if (price === null) throw new Error(`items[${index}].price is required.`);
+                return { service, deliverables, price };
+            });
+        }
+
+        const rawItems = typeof bill.items === "string" ? JSON.parse(bill.items) : bill.items;
+        const computedSubtotal = Array.isArray(rawItems) ? rawItems.reduce((sum, item) => sum + Number(item.price), 0) : 0;
+        bill.subtotal = toMoney(subtotal, "subtotal") ?? Number(computedSubtotal.toFixed(2));
+        bill.gstRate = toMoney(gstRate, "gstRate") ?? bill.gstRate;
+        bill.taxAmount = toMoney(taxAmount, "taxAmount") ?? Number(((bill.subtotal * bill.gstRate) / 100).toFixed(2));
+        bill.totalAmount = toMoney(totalAmount, "totalAmount") ?? Number((bill.subtotal + bill.taxAmount).toFixed(2));
+        
+        const newAdvancePaid = toMoney(advancePaid, "advancePaid");
+        if (newAdvancePaid !== null) bill.advancePaid = newAdvancePaid;
+
+        if (bill.advancePaid > bill.totalAmount) {
+            return res.status(400).json({ success: false, message: "advancePaid cannot be greater than totalAmount." });
+        }
+
+        bill.balanceAmount = Number((bill.totalAmount - bill.advancePaid).toFixed(2));
+
+        // Auto-update status if paid in full
+        if (bill.balanceAmount <= 0 && bill.advancePaid > 0) {
+            bill.status = "Paid";
+        } else if (bill.advancePaid > 0 && bill.balanceAmount > 0 && bill.status === "Unpaid") {
+            bill.status = "Partially Paid";
+        }
+
+        await bill.save();
+
+        res.status(200).json({
+            success: true,
+            message: "Bill updated successfully.",
+            data: mapBillResponse(bill),
+        });
+
+    } catch (error) {
+        const clientErrors = ["items[", "must be a valid", "is required", "cannot be greater"];
+        if (clientErrors.some((part) => error.message.includes(part))) {
+            return res.status(400).json({ success: false, message: error.message });
+        }
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// PATCH /api/bills/:id/status
+exports.updateBillStatus = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { status } = req.body;
+
+        if (!status) {
+            return res.status(400).json({ success: false, message: "Status is required." });
+        }
+
+        const bill = await Bill.findByPk(id);
+        if (!bill) {
+            return res.status(404).json({ success: false, message: "Bill not found." });
+        }
+
+        const finalStatus = status.trim();
+        if (!VALID_STATUSES.includes(finalStatus)) {
+            return res.status(400).json({
+                success: false,
+                message: `Invalid status. Must be one of: ${VALID_STATUSES.join(", ")}`,
+            });
+        }
+
+        bill.status = finalStatus;
+
+        // Optionally adjust balance based on status? We'll just update status as requested.
+        await bill.save();
+
+        res.status(200).json({
+            success: true,
+            message: `Bill status updated to ${finalStatus}.`,
+            data: mapBillResponse(bill),
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
