@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useUIStore } from "@/store/sidebar";
 import { motion } from "framer-motion";
 import { Users, Mail, Calendar, Shield, Loader2, Plus, Eye, EyeOff, UserPlus, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,6 +30,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { getAdmins, createAdminUser, deleteAdminUser, getStoredAdmin, AdminData } from "@/lib/api";
 
 const Admins = () => {
+    const setHeaderInfo = useUIStore((s) => s.setHeaderInfo);
     const [admins, setAdmins] = useState<AdminData[]>([]);
     const [loading, setLoading] = useState(true);
     const [dialogOpen, setDialogOpen] = useState(false);
@@ -56,6 +58,10 @@ const Admins = () => {
             setLoading(false);
         }
     };
+
+    useEffect(() => {
+        setHeaderInfo("Manage Admins", "View and manage admin accounts");
+    }, [setHeaderInfo]);
 
     useEffect(() => {
         fetchAdmins();
@@ -142,132 +148,119 @@ const Admins = () => {
 
     return (
         <div className="p-6 lg:p-8 space-y-6">
-            {/* Header */}
-            <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
-                className="flex items-center justify-between"
-            >
-                <div>
-                    <h1 className="text-2xl font-bold text-foreground">Manage Admins</h1>
-                    <p className="text-sm text-muted-foreground mt-1">
-                        View and manage admin accounts
-                    </p>
-                </div>
-                <div className="flex items-center gap-3">
-                    <Badge variant="secondary" className="text-sm px-3 py-1">
-                        <Users className="w-4 h-4 mr-1.5" />
-                        {admins.length} Admin{admins.length !== 1 ? "s" : ""}
-                    </Badge>
+            {/* Header Actions */}
+            <div className="flex items-center justify-end gap-3">
+                <Badge variant="secondary" className="text-sm px-3 py-1">
+                    <Users className="w-4 h-4 mr-1.5" />
+                    {admins.length} Admin{admins.length !== 1 ? "s" : ""}
+                </Badge>
 
-                    {/* Add Admin Dialog */}
-                    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                        <DialogTrigger asChild>
-                            <Button className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2">
-                                <Plus className="w-4 h-4" />
-                                Add Admin
+                {/* Add Admin Dialog */}
+                <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                    <DialogTrigger asChild>
+                        <Button className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2">
+                            <Plus className="w-4 h-4" />
+                            Add Admin
+                        </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-md bg-card border-border">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2 text-foreground">
+                                <UserPlus className="w-5 h-5 text-primary" />
+                                Add New Admin
+                            </DialogTitle>
+                            <DialogDescription>
+                                Create a new admin account. They can login with these credentials.
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        <form onSubmit={handleCreateAdmin} className="space-y-4 mt-2">
+                            {/* Name */}
+                            <div className="space-y-2">
+                                <Label htmlFor="admin-name" className="text-sm font-medium text-foreground/80">
+                                    Full Name
+                                </Label>
+                                <Input
+                                    id="admin-name"
+                                    type="text"
+                                    placeholder="John Doe"
+                                    value={newAdmin.name}
+                                    onChange={(e) => setNewAdmin({ ...newAdmin, name: e.target.value })}
+                                    className="h-10 bg-secondary/50 border-border/50 focus:border-primary/50"
+                                    required
+                                />
+                            </div>
+
+                            {/* Email */}
+                            <div className="space-y-2">
+                                <Label htmlFor="admin-email" className="text-sm font-medium text-foreground/80">
+                                    Email Address
+                                </Label>
+                                <Input
+                                    id="admin-email"
+                                    type="email"
+                                    placeholder="admin@cinematic.com"
+                                    value={newAdmin.email}
+                                    onChange={(e) => setNewAdmin({ ...newAdmin, email: e.target.value })}
+                                    className="h-10 bg-secondary/50 border-border/50 focus:border-primary/50"
+                                    required
+                                />
+                            </div>
+
+                            {/* Password */}
+                            <div className="space-y-2">
+                                <Label htmlFor="admin-password" className="text-sm font-medium text-foreground/80">
+                                    Password
+                                </Label>
+                                <div className="relative">
+                                    <Input
+                                        id="admin-password"
+                                        type={showPassword ? "text" : "password"}
+                                        placeholder="Min. 6 characters"
+                                        value={newAdmin.password}
+                                        onChange={(e) =>
+                                            setNewAdmin({ ...newAdmin, password: e.target.value })
+                                        }
+                                        className="h-10 pr-10 bg-secondary/50 border-border/50 focus:border-primary/50"
+                                        required
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                                        tabIndex={-1}
+                                    >
+                                        {showPassword ? (
+                                            <EyeOff className="w-4 h-4" />
+                                        ) : (
+                                            <Eye className="w-4 h-4" />
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <Button
+                                id="create-admin-submit"
+                                type="submit"
+                                disabled={creating}
+                                className="w-full h-10 bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
+                            >
+                                {creating ? (
+                                    <span className="flex items-center gap-2">
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        Creating...
+                                    </span>
+                                ) : (
+                                    <span className="flex items-center gap-2">
+                                        <UserPlus className="w-4 h-4" />
+                                        Create Admin
+                                    </span>
+                                )}
                             </Button>
-                        </DialogTrigger>
-                        <DialogContent className="sm:max-w-md bg-card border-border">
-                            <DialogHeader>
-                                <DialogTitle className="flex items-center gap-2 text-foreground">
-                                    <UserPlus className="w-5 h-5 text-primary" />
-                                    Add New Admin
-                                </DialogTitle>
-                                <DialogDescription>
-                                    Create a new admin account. They can login with these credentials.
-                                </DialogDescription>
-                            </DialogHeader>
-
-                            <form onSubmit={handleCreateAdmin} className="space-y-4 mt-2">
-                                {/* Name */}
-                                <div className="space-y-2">
-                                    <Label htmlFor="admin-name" className="text-sm font-medium text-foreground/80">
-                                        Full Name
-                                    </Label>
-                                    <Input
-                                        id="admin-name"
-                                        type="text"
-                                        placeholder="John Doe"
-                                        value={newAdmin.name}
-                                        onChange={(e) => setNewAdmin({ ...newAdmin, name: e.target.value })}
-                                        className="h-10 bg-secondary/50 border-border/50 focus:border-primary/50"
-                                        required
-                                    />
-                                </div>
-
-                                {/* Email */}
-                                <div className="space-y-2">
-                                    <Label htmlFor="admin-email" className="text-sm font-medium text-foreground/80">
-                                        Email Address
-                                    </Label>
-                                    <Input
-                                        id="admin-email"
-                                        type="email"
-                                        placeholder="admin@cinematic.com"
-                                        value={newAdmin.email}
-                                        onChange={(e) => setNewAdmin({ ...newAdmin, email: e.target.value })}
-                                        className="h-10 bg-secondary/50 border-border/50 focus:border-primary/50"
-                                        required
-                                    />
-                                </div>
-
-                                {/* Password */}
-                                <div className="space-y-2">
-                                    <Label htmlFor="admin-password" className="text-sm font-medium text-foreground/80">
-                                        Password
-                                    </Label>
-                                    <div className="relative">
-                                        <Input
-                                            id="admin-password"
-                                            type={showPassword ? "text" : "password"}
-                                            placeholder="Min. 6 characters"
-                                            value={newAdmin.password}
-                                            onChange={(e) =>
-                                                setNewAdmin({ ...newAdmin, password: e.target.value })
-                                            }
-                                            className="h-10 pr-10 bg-secondary/50 border-border/50 focus:border-primary/50"
-                                            required
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowPassword(!showPassword)}
-                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                                            tabIndex={-1}
-                                        >
-                                            {showPassword ? (
-                                                <EyeOff className="w-4 h-4" />
-                                            ) : (
-                                                <Eye className="w-4 h-4" />
-                                            )}
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <Button
-                                    id="create-admin-submit"
-                                    type="submit"
-                                    disabled={creating}
-                                    className="w-full h-10 bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
-                                >
-                                    {creating ? (
-                                        <span className="flex items-center gap-2">
-                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                            Creating...
-                                        </span>
-                                    ) : (
-                                        <span className="flex items-center gap-2">
-                                            <UserPlus className="w-4 h-4" />
-                                            Create Admin
-                                        </span>
-                                    )}
-                                </Button>
-                            </form>
-                        </DialogContent>
-                    </Dialog>
-                </div>
-            </motion.div>
+                        </form>
+                    </DialogContent>
+                </Dialog>
+            </div>
 
             {/* Admins List */}
             {loading ? (

@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import { Header } from "@/components/layout/Header";
+import { useUIStore } from "@/store/sidebar";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Eye, Trash2, Loader2, Edit2, Save, X, Printer, PlusCircle } from "lucide-react";
+import { Eye, Trash2, Loader2, Edit2, Save, X, Printer, PlusCircle, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -22,10 +22,12 @@ const statusColor: Record<string, string> = {
 
 export default function Quotations() {
   const navigate = useNavigate();
+  const setHeaderInfo = useUIStore((s) => s.setHeaderInfo);
   const [quotations, setQuotations] = useState<any[]>([]);
   const [selected, setSelected] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("All");
+  const [search, setSearch] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editForm, setEditForm] = useState<any>({});
@@ -33,7 +35,7 @@ export default function Quotations() {
 
   const fetchQuotations = async () => {
     try {
-      const res = await getQuotations(filter);
+      const res = await getQuotations(filter, search);
       if (res.success) {
         setQuotations(res.data);
       }
@@ -45,9 +47,16 @@ export default function Quotations() {
   };
 
   useEffect(() => {
+    setHeaderInfo("Quotations", "Manage client inquiries and quotes");
+  }, [setHeaderInfo]);
+
+  useEffect(() => {
     setLoading(true);
-    fetchQuotations();
-  }, [filter]);
+    const delayDebounceFn = setTimeout(() => {
+      fetchQuotations();
+    }, 400);
+    return () => clearTimeout(delayDebounceFn);
+  }, [filter, search]);
 
   const handleStatusChange = async (id: number, status: string) => {
     try {
@@ -125,99 +134,102 @@ export default function Quotations() {
 
   if (loading) {
     return (
-      <>
-        <Header title="Quotations" subtitle="Manage client inquiries and quotes" />
-        <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
-      </>
+      <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
     );
   }
 
   return (
-    <>
-      <Header title="Quotations" subtitle="Manage client inquiries and quotes" />
-      <div className="p-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex gap-2">
-            {["All", "New", "Contacted", "Booked", "Closed"].map((f) => (
-              <Badge key={f} variant="outline"
-                className={`cursor-pointer hover:bg-muted/50 transition-colors px-3 py-1 ${filter === f ? "bg-primary/20 text-primary border-primary/40" : ""}`}
-                onClick={() => setFilter(f)}>
-                {f}
-              </Badge>
-            ))}
-          </div>
+    <div className="p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="flex gap-2">
+          {["All", "New", "Contacted", "Booked", "Closed"].map((f) => (
+            <Badge key={f} variant="outline"
+              className={`cursor-pointer hover:bg-muted/50 transition-colors px-3 py-1 ${filter === f ? "bg-primary/20 text-primary border-primary/40" : ""}`}
+              onClick={() => setFilter(f)}>
+              {f}
+            </Badge>
+          ))}
         </div>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input 
+            placeholder="Search by client name..." 
+            className="pl-9 w-64 bg-muted/50 border-border/50 text-sm focus:ring-1"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      </div>
 
-        <div className="grid grid-cols-1 gap-6">
-          <Card className="glass-card">
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-border/50 hover:bg-transparent">
-                    <TableHead className="text-muted-foreground">ID</TableHead>
-                    <TableHead className="text-muted-foreground">Client</TableHead>
-                    <TableHead className="text-muted-foreground">Event</TableHead>
-                    <TableHead className="text-muted-foreground">Budget</TableHead>
-                    <TableHead className="text-muted-foreground">Status</TableHead>
-                    <TableHead className="text-muted-foreground text-right pr-6">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {quotations.length > 0 ? quotations.map((q) => (
-                    <TableRow
-                      key={q.id}
-                      className={`border-border/50 transition-colors ${!q.isRead ? "bg-red-500/5 border-l-2 border-l-red-500" : ""} hover:bg-muted/20`}
-                    >
-                      <TableCell className="font-mono text-xs text-muted-foreground">
-                        <div className="flex items-center gap-1.5">
-                          {!q.isRead && <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse flex-shrink-0" />}
-                          Q-{String(q.id).padStart(3, "0")}
-                        </div>
-                      </TableCell>
-                      <TableCell className="font-medium">{q.name}</TableCell>
-                      <TableCell className="text-sm">{q.eventType}</TableCell>
-                      <TableCell className="font-semibold text-primary">{q.budget || "-"}</TableCell>
-                      <TableCell><Badge variant="outline" className={statusColor[q.status] || ""}>{q.status}</Badge></TableCell>
-                      <TableCell className="text-right pr-6">
-                        <div className="flex gap-1 justify-end">
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDownloadPDF(q.id);
-                            }}
-                          >
-                            <Printer className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => {
+      <div className="grid grid-cols-1 gap-6">
+        <Card className="glass-card">
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-border/50 hover:bg-transparent">
+                  <TableHead className="text-muted-foreground">ID</TableHead>
+                  <TableHead className="text-muted-foreground">Client</TableHead>
+                  <TableHead className="text-muted-foreground">Event</TableHead>
+                  <TableHead className="text-muted-foreground">Budget</TableHead>
+                  <TableHead className="text-muted-foreground">Status</TableHead>
+                  <TableHead className="text-muted-foreground text-right pr-6">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {quotations.length > 0 ? quotations.map((q) => (
+                  <TableRow
+                    key={q.id}
+                    className={`border-border/50 transition-colors ${!q.isRead ? "bg-red-500/5 border-l-2 border-l-red-500" : ""} hover:bg-muted/20`}
+                  >
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      <div className="flex items-center gap-1.5">
+                        {!q.isRead && <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse flex-shrink-0" />}
+                        Q-{String(q.id).padStart(3, "0")}
+                      </div>
+                    </TableCell>
+                    <TableCell className="font-medium">{q.name}</TableCell>
+                    <TableCell className="text-sm">{q.eventType}</TableCell>
+                    <TableCell className="font-semibold text-primary">{q.budget || "-"}</TableCell>
+                    <TableCell><Badge variant="outline" className={statusColor[q.status] || ""}>{q.status}</Badge></TableCell>
+                    <TableCell className="text-right pr-6">
+                      <div className="flex gap-1 justify-end">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50"
+                          onClick={(e) => {
                             e.stopPropagation();
-                            setSelected(q);
-                            setIsEditing(false);
-                            setIsModalOpen(true);
-                            if (!q.isRead) {
-                              markQuotationAsRead(q.id).catch(() => { });
-                              setQuotations((prev) => prev.map((item) => item.id === q.id ? { ...item, isRead: true } : item));
-                              removeNotification(q.id);
-                            }
-                          }}>
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-destructive"
-                            onClick={(e) => { e.stopPropagation(); handleDelete(q.id); }}>
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )) : (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground py-8">No quotations found</TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </div>
+                            handleDownloadPDF(q.id);
+                          }}
+                        >
+                          <Printer className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => {
+                          e.stopPropagation();
+                          setSelected(q);
+                          setIsEditing(false);
+                          setIsModalOpen(true);
+                          if (!q.isRead) {
+                            markQuotationAsRead(q.id).catch(() => { });
+                            setQuotations((prev) => prev.map((item) => item.id === q.id ? { ...item, isRead: true } : item));
+                            removeNotification(q.id);
+                          }
+                        }}>
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-destructive"
+                          onClick={(e) => { e.stopPropagation(); handleDelete(q.id); }}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )) : (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">No quotations found</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Details Modal */}
@@ -304,13 +316,10 @@ export default function Quotations() {
                         const rows = srvs.map(srv => ({ service: srv, description: reqs[srv] || '' }));
 
                         const commitRows = (updated: { service: string; description: string }[]) => {
-                          // Keep ALL rows including empty ones so new blank rows stay visible.
-                          // Only build the filtered requirements for non-empty service names.
                           const newReqs: Record<string, string> = {};
                           updated.forEach(r => { if (r.service.trim()) newReqs[r.service.trim()] = r.description; });
                           setEditForm((prev: any) => ({
                             ...prev,
-                            // Store the full row list (including blanks) so the UI stays in sync.
                             servicesRequested: updated.map(r => r.service),
                             requirements: JSON.stringify(newReqs),
                           }));
@@ -422,59 +431,59 @@ export default function Quotations() {
                         <div className="py-2 my-2 border-y border-border/50 space-y-2">
                           {selected.functions && (
                             <div>
-                              <span className="text-xs text-muted-foreground block mb-1">Functions</span>
-                              <span className="text-sm">{selected.functions}</span>
+                                <span className="text-xs text-muted-foreground block mb-1">Functions</span>
+                                <span className="text-sm">{selected.functions}</span>
                             </div>
                           )}
                           {selected.servicesRequested && (Array.isArray(selected.servicesRequested) ? selected.servicesRequested.length > 0 : String(selected.servicesRequested).length > 0) && (
                             <div>
-                              <span className="text-xs text-muted-foreground block mb-1">Services Requested</span>
-                              <div className="flex flex-wrap gap-1">
-                                  {(() => {
-                                  let viewSrvs: string[] = [];
-                                  if (Array.isArray(selected.servicesRequested)) {
-                                    viewSrvs = selected.servicesRequested;
-                                  } else if (typeof selected.servicesRequested === 'string') {
-                                    try {
-                                      if (selected.servicesRequested.startsWith('[')) {
-                                        viewSrvs = JSON.parse(selected.servicesRequested);
-                                      } else {
+                                <span className="text-xs text-muted-foreground block mb-1">Services Requested</span>
+                                <div className="flex flex-wrap gap-1">
+                                    {(() => {
+                                    let viewSrvs: string[] = [];
+                                    if (Array.isArray(selected.servicesRequested)) {
+                                        viewSrvs = selected.servicesRequested;
+                                    } else if (typeof selected.servicesRequested === 'string') {
+                                        try {
+                                        if (selected.servicesRequested.startsWith('[')) {
+                                            viewSrvs = JSON.parse(selected.servicesRequested);
+                                        } else {
+                                            viewSrvs = selected.servicesRequested.split(',').map((s: string) => s.trim());
+                                        }
+                                        } catch (e) {
                                         viewSrvs = selected.servicesRequested.split(',').map((s: string) => s.trim());
-                                      }
-                                    } catch (e) {
-                                      viewSrvs = selected.servicesRequested.split(',').map((s: string) => s.trim());
+                                        }
                                     }
-                                  }
-                                  return viewSrvs.map((srv, i) => <Badge key={i} variant="secondary" className="text-[10px] px-1.5 py-0 h-5 font-normal">{srv}</Badge>);
-                                })()}
-                              </div>
+                                    return viewSrvs.map((srv, i) => <Badge key={i} variant="secondary" className="text-[10px] px-1.5 py-0 h-5 font-normal">{srv}</Badge>);
+                                    })()}
+                                </div>
                             </div>
                           )}
 
                           {selected.requirements && (
                             <div className="pt-2 border-t border-border/50 mt-2">
-                              <span className="text-xs text-muted-foreground block mb-2">Service Descriptions</span>
-                              <div className="space-y-3 bg-muted/10 p-3 rounded-md border border-border/30">
+                                <span className="text-xs text-muted-foreground block mb-2">Service Descriptions</span>
+                                <div className="space-y-3 bg-muted/10 p-3 rounded-md border border-border/30">
                                 {(() => {
-                                  try {
+                                    try {
                                     if (selected.requirements.startsWith('{')) {
-                                      const reqs = JSON.parse(selected.requirements);
-                                      const entries = Object.entries(reqs).filter(([_, desc]) => Boolean(desc));
-                                      if (entries.length === 0) return <span className="text-xs text-muted-foreground">No descriptions added</span>;
-                                      return entries.map(([srv, desc]: any, i) => (
+                                        const reqs = JSON.parse(selected.requirements);
+                                        const entries = Object.entries(reqs).filter(([_, desc]) => Boolean(desc));
+                                        if (entries.length === 0) return <span className="text-xs text-muted-foreground">No descriptions added</span>;
+                                        return entries.map(([srv, desc]: any, i) => (
                                         <div key={i} className="grid grid-cols-3 gap-2 items-start py-1">
-                                          <span className="font-semibold text-xs text-foreground text-right pr-2">{srv}</span>
-                                          <div className="col-span-2 whitespace-pre-wrap text-muted-foreground text-sm">{desc}</div>
+                                            <span className="font-semibold text-xs text-foreground text-right pr-2">{srv}</span>
+                                            <div className="col-span-2 whitespace-pre-wrap text-muted-foreground text-sm">{desc}</div>
                                         </div>
-                                      ));
+                                        ));
                                     } else {
-                                      return <span className="text-sm whitespace-pre-wrap">{selected.requirements}</span>;
+                                        return <span className="text-sm whitespace-pre-wrap">{selected.requirements}</span>;
                                     }
-                                  } catch (e) {
+                                    } catch (e) {
                                     return <span className="text-sm whitespace-pre-wrap">{selected.requirements}</span>;
-                                  }
+                                    }
                                 })()}
-                              </div>
+                                </div>
                             </div>
                           )}
                         </div>
@@ -500,6 +509,6 @@ export default function Quotations() {
           )}
         </DialogContent>
       </Dialog>
-    </>
+    </div>
   );
 }

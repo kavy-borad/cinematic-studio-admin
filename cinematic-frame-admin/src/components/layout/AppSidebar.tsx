@@ -2,9 +2,9 @@ import { NavLink, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   LayoutDashboard, Image, FileText, DollarSign, Users,
-  Star, BarChart3, Settings, Camera, ChevronLeft, ChevronRight, LogOut, ShieldCheck, Receipt
+  Star, BarChart3, Settings, Camera, ChevronLeft, ChevronRight, LogOut, ShieldCheck, Receipt, User
 } from "lucide-react";
-import { useSidebarStore } from "@/store/sidebar";
+import { useUIStore } from "@/store/sidebar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNotificationStore } from "@/store/notifications";
 
@@ -14,15 +14,16 @@ const links = [
   { to: "/quotations", icon: FileText, label: "Quotations" },
   { to: "/services", icon: DollarSign, label: "Services" },
   { to: "/clients", icon: Users, label: "Clients" },
-  { to: "/testimonials", icon: Star, label: "Testimonials" },
-  { to: "/analytics", icon: BarChart3, label: "Analytics" },
+  // { to: "/testimonials", icon: Star, label: "Testimonials" },
+  // { to: "/analytics", icon: BarChart3, label: "Analytics" },
   { to: "/bills", icon: Receipt, label: "Bills" },
   { to: "/admins", icon: ShieldCheck, label: "Admins" },
+  { to: "/profile", icon: User, label: "My Profile" },
   { to: "/settings", icon: Settings, label: "Settings" },
 ];
 
 export function AppSidebar() {
-  const { collapsed, toggle } = useSidebarStore();
+  const { collapsed, toggleSidebar } = useUIStore();
   const location = useLocation();
   const { admin, logout } = useAuth();
   const unreadCount = useNotificationStore((s) => s.unreadCount);
@@ -87,7 +88,7 @@ export function AppSidebar() {
         <div className="p-3">
           <button
             onClick={logout}
-            className="sidebar-link w-full text-red-500 hover:text-red-400 hover:bg-red-500/10 transition-all"
+            className="sidebar-link w-full text-red-500 hover:text-red-400 hover:bg-red-500/10 transition-all border-none shadow-none"
             title={collapsed ? "Logout" : undefined}
           >
             <LogOut className="h-5 w-5 flex-shrink-0" />
@@ -97,7 +98,7 @@ export function AppSidebar() {
 
         {/* Collapse Toggle */}
         <button
-          onClick={toggle}
+          onClick={toggleSidebar}
           className="h-12 flex items-center justify-center border-t border-sidebar-border text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/30 transition-colors w-full"
           title={collapsed ? "Expand Sidebar" : "Collapse Sidebar"}
         >

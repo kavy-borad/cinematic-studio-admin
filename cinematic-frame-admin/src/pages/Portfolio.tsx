@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { Header } from "@/components/layout/Header";
+import { useUIStore } from "@/store/sidebar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -87,6 +87,7 @@ function resolveImg(url: string | null | undefined) {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function Portfolio() {
+  const setHeaderInfo = useUIStore((s) => s.setHeaderInfo);
   const [albums, setAlbums] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("All");
@@ -133,6 +134,10 @@ export default function Portfolio() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    setHeaderInfo("Portfolio", "Manage your photography collections");
+  }, [setHeaderInfo]);
 
   useEffect(() => {
     fetchPortfolio(activeTab);
@@ -472,135 +477,132 @@ export default function Portfolio() {
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <>
-      <Header title="Portfolio" subtitle="Manage your photography collections" />
-      <div className="p-6 space-y-6">
-        {/* Hidden file inputs – Add */}
-        <input ref={addCoverRef} type="file" accept="image/*" className="hidden" onChange={handleAddCoverChange} />
-        <input ref={addGalleryRef} type="file" multiple accept="image/*" className="hidden" onChange={handleAddGalleryChange} />
+    <div className="p-6 space-y-6">
+      {/* Hidden file inputs – Add */}
+      <input ref={addCoverRef} type="file" accept="image/*" className="hidden" onChange={handleAddCoverChange} />
+      <input ref={addGalleryRef} type="file" multiple accept="image/*" className="hidden" onChange={handleAddGalleryChange} />
 
-        {/* Hidden file inputs – Edit */}
-        <input ref={editCoverRef} type="file" accept="image/*" className="hidden" onChange={handleEditCoverChange} />
-        <input ref={editGalleryRef} type="file" multiple accept="image/*" className="hidden" onChange={handleEditGalleryChange} />
+      {/* Hidden file inputs – Edit */}
+      <input ref={editCoverRef} type="file" accept="image/*" className="hidden" onChange={handleEditCoverChange} />
+      <input ref={editGalleryRef} type="file" multiple accept="image/*" className="hidden" onChange={handleEditGalleryChange} />
 
-        {/* Tabs + Action buttons */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <TabsList className="bg-muted/50 flex-wrap h-auto gap-1">
-              {CATEGORIES.map((c) => (
-                <TabsTrigger key={c} value={c} className="text-xs">
-                  {c}
-                </TabsTrigger>
-              ))}
-            </TabsList>
+      {/* Tabs + Action buttons */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <TabsList className="bg-muted/50 flex-wrap h-auto gap-1">
+            {CATEGORIES.map((c) => (
+              <TabsTrigger key={c} value={c} className="text-xs">
+                {c}
+              </TabsTrigger>
+            ))}
+          </TabsList>
 
-            <div className="flex gap-2">
-              <Button variant="ghost" size="icon"><Grid3X3 className="h-4 w-4" /></Button>
-              <Button variant="ghost" size="icon"><List className="h-4 w-4" /></Button>
-              <Button size="sm" className="gap-2" onClick={openAddDialog}>
-                <Plus className="h-4 w-4" />
-                Add Portfolio
+          <div className="flex gap-2">
+            <Button variant="ghost" size="icon"><Grid3X3 className="h-4 w-4" /></Button>
+            <Button variant="ghost" size="icon"><List className="h-4 w-4" /></Button>
+            <Button size="sm" className="gap-2" onClick={openAddDialog}>
+              <Plus className="h-4 w-4" />
+              Add Portfolio
+            </Button>
+          </div>
+        </div>
+
+        <TabsContent value={activeTab} className="mt-6">
+          {loading ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : filteredAlbums.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 gap-4 text-muted-foreground">
+              <FolderOpen className="h-12 w-12 opacity-30" />
+              <p className="text-sm">No portfolio items found</p>
+              <Button variant="outline" size="sm" className="gap-2" onClick={openAddDialog}>
+                <Plus className="h-4 w-4" /> Add First Album
               </Button>
             </div>
-          </div>
+          ) : (
+            <motion.div
+              variants={container}
+              initial="hidden"
+              animate="show"
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
+            >
+              {filteredAlbums.map((album, i) => (
+                <motion.div key={album.id} variants={item}>
+                  <Card className="glass-card group overflow-hidden stat-card-hover cursor-pointer">
+                    <div
+                      className={`h-40 bg-gradient-to-br ${colors[i % colors.length]} flex items-center justify-center relative overflow-hidden`}
+                    >
+                      {album.coverImage ? (
+                        <img
+                          src={resolveImg(album.coverImage)!}
+                          alt={album.title}
+                          className="w-full h-full object-cover absolute inset-0"
+                        />
+                      ) : (
+                        <span className="text-4xl opacity-30">📷</span>
+                      )}
 
-          <TabsContent value={activeTab} className="mt-6">
-            {loading ? (
-              <div className="flex justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              </div>
-            ) : filteredAlbums.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 gap-4 text-muted-foreground">
-                <FolderOpen className="h-12 w-12 opacity-30" />
-                <p className="text-sm">No portfolio items found</p>
-                <Button variant="outline" size="sm" className="gap-2" onClick={openAddDialog}>
-                  <Plus className="h-4 w-4" /> Add First Album
-                </Button>
-              </div>
-            ) : (
-              <motion.div
-                variants={container}
-                initial="hidden"
-                animate="show"
-                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
-              >
-                {filteredAlbums.map((album, i) => (
-                  <motion.div key={album.id} variants={item}>
-                    <Card className="glass-card group overflow-hidden stat-card-hover cursor-pointer">
-                      <div
-                        className={`h-40 bg-gradient-to-br ${colors[i % colors.length]} flex items-center justify-center relative overflow-hidden`}
-                      >
-                        {album.coverImage ? (
-                          <img
-                            src={resolveImg(album.coverImage)!}
-                            alt={album.title}
-                            className="w-full h-full object-cover absolute inset-0"
-                          />
-                        ) : (
-                          <span className="text-4xl opacity-30">📷</span>
-                        )}
+                      {album.featured && (
+                        <Badge className="absolute top-3 left-3 bg-primary/90 text-primary-foreground gap-1 text-xs z-10">
+                          <Star className="h-3 w-3" /> Featured
+                        </Badge>
+                      )}
 
-                        {album.featured && (
-                          <Badge className="absolute top-3 left-3 bg-primary/90 text-primary-foreground gap-1 text-xs z-10">
-                            <Star className="h-3 w-3" /> Featured
-                          </Badge>
-                        )}
-
-                        {/* ── Hover action buttons ─────────────────────── */}
-                        <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 z-10">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 bg-background/80 hover:bg-background"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openEditDialog(album);
-                            }}
-                            title="Edit portfolio"
-                          >
-                            <Edit className="h-3 w-3" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 bg-background/80 hover:bg-destructive hover:text-destructive-foreground"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDelete(album.id);
-                            }}
-                            title="Delete portfolio"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </div>
+                      {/* ── Hover action buttons ─────────────────────── */}
+                      <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 z-10">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 bg-background/80 hover:bg-background"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEditDialog(album);
+                          }}
+                          title="Edit portfolio"
+                        >
+                          <Edit className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 bg-background/80 hover:bg-destructive hover:text-destructive-foreground"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(album.id);
+                          }}
+                          title="Delete portfolio"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
                       </div>
+                    </div>
 
-                      <CardContent className="p-4">
-                        <h3 className="font-semibold text-sm text-foreground truncate">
-                          {album.title}
-                        </h3>
-                        <div className="flex items-center justify-between mt-1">
-                          <span className="text-xs text-muted-foreground">
-                            {album.photoCount || (album.images?.length ?? 0)} photos
-                          </span>
-                          <Badge variant="outline" className="text-xs border-border/50">
-                            {album.category}
-                          </Badge>
-                        </div>
-                        {album.clientName && (
-                          <p className="text-xs text-muted-foreground mt-1 truncate">
-                            👤 {album.clientName}
-                          </p>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </motion.div>
-                ))}
-              </motion.div>
-            )}
-          </TabsContent>
-        </Tabs>
-      </div>
+                    <CardContent className="p-4">
+                      <h3 className="font-semibold text-sm text-foreground truncate">
+                        {album.title}
+                      </h3>
+                      <div className="flex items-center justify-between mt-1">
+                        <span className="text-xs text-muted-foreground">
+                          {album.photoCount || (album.images?.length ?? 0)} photos
+                        </span>
+                        <Badge variant="outline" className="text-xs border-border/50">
+                          {album.category}
+                        </Badge>
+                      </div>
+                      {album.clientName && (
+                        <p className="text-xs text-muted-foreground mt-1 truncate">
+                          👤 {album.clientName}
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ))}
+            </motion.div>
+          )}
+        </TabsContent>
+      </Tabs>
 
       {/* ═══════════════════════════════════════════════════════════════════
           ADD NEW PORTFOLIO DIALOG
@@ -797,15 +799,15 @@ export default function Portfolio() {
           <div className="space-y-2">
             <Label>
               Add More Photos
-              <span className="text-xs text-muted-foreground ml-1">
-                (Will be ADDED to existing photos, not replace them)
+              <span className="text-xs text-muted-foreground ml-1 font-normal">
+                (Upload new images to add to the gallery)
               </span>
             </Label>
             {editNewGalleryPreviews.length > 0 && (
               <div className="flex flex-wrap gap-2 mb-2">
                 {editNewGalleryPreviews.map((url, idx) => (
                   <div key={idx} className="relative group">
-                    <img src={url} alt={`new-gallery-${idx}`} className="h-16 w-20 object-cover rounded-lg border border-primary/40" />
+                    <img src={url} alt={`new-gallery-${idx}`} className="h-16 w-20 object-cover rounded-lg border border-primary/30" />
                     <button
                       type="button"
                       onClick={() => removeEditNewGallery(idx)}
@@ -826,16 +828,14 @@ export default function Portfolio() {
             >
               <ImagePlus className="h-4 w-4" />
               {editNewGalleryFiles.length > 0
-                ? `${editNewGalleryFiles.length} new photos – Add More`
+                ? `${editNewGalleryFiles.length} new photos selected`
                 : "Choose New Gallery Photos"}
             </Button>
           </div>
 
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setEditDialogOpen(false)} disabled={editSubmitting}>
-              Cancel
-            </Button>
-            <Button onClick={handleEditSubmit} disabled={editSubmitting} className="gap-2 min-w-[160px]">
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)} disabled={editSubmitting}>Cancel</Button>
+            <Button onClick={handleEditSubmit} disabled={editSubmitting} className="gap-2 min-w-[140px]">
               {editSubmitting ? (
                 <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</>
               ) : (
@@ -845,6 +845,6 @@ export default function Portfolio() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </>
+    </div>
   );
 }

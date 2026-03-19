@@ -16,76 +16,89 @@
 
 <body>
     <div class="page">
-        <!-- Top Image Gallery -->
-        <div class="image-gallery">
-                <img src="https://images.unsplash.com/photo-1519225421980-715cb0215aed?q=80&w=800&auto=format&fit=crop"
-                    crossorigin="anonymous" class="cat-img">
-                <img src="https://images.unsplash.com/photo-1520854221256-17451cc331bf?q=80&w=800&auto=format&fit=crop"
-                    crossorigin="anonymous" class="cat-img">
-                <img src="https://images.unsplash.com/photo-1511285560929-80b456fea0bc?q=80&w=800&auto=format&fit=crop"
-                    crossorigin="anonymous" class="cat-img">
-            </div>
-
-            <!-- Client & Company Details -->
-            <div class="details-section">
-                <!-- Left: Client -->
-                <div>
-                    <table class="client-table">
-                        <tr>
-                            <td class="label">CLIENT NAME</td>
-                            <td class="value">
-                                <%= client.name %>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td class="label">PHONE</td>
-                            <td class="value">
-                                <%= client.phone || '-' %>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td class="label">EVENT TYPE</td>
-                            <td class="value">
-                                <%= event.type || '-' %>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td class="label">EVENT DATE</td>
-                            <td class="value">
-                                <%= event.date || '-' %>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td class="label">VENUE</td>
-                            <td class="value">
-                                <%= event.venue || '-' %>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td class="label">GUEST COUNT</td>
-                            <td class="value">
-                                <%= event.guestCount || '-' %>
-                            </td>
-                        </tr>
-                    </table>
-                </div>
-
-                <!-- Right: Company -->
-                <div class="company-block">
-                    <div class="logo-text">Aura</div>
-                    <div class="subtitle-text">Cinematic Weddings</div>
-                    <div class="company-contact">
-                        Aura Cinematic Weddings<br>
-                        Phone: +91 080 234 5789<br>
-                        Website: www.auraweddings.com
-                    </div>
+        <!-- Header -->
+        <header class="header">
+            <div class="company-info">
+                <div class="company-name">Aura Cinematic Weddings</div>
+                <div class="company-tagline">Cinematic Weddings</div>
+                <div class="company-contact">
+                    +91 080 234 5789 | www.auraweddings.com<br>
+                    hello@auraweddings.com
                 </div>
             </div>
             
-            <!-- Main Heading -->
-            <div class="main-heading-container" style="margin-top:20px; margin-bottom: 25px;">
-                <h1 class="main-title" style="margin-bottom: 5px;">QUOTATION</h1>
+            <div class="invoice-details">
+                <h1>QUOTATION</h1>
+                <div class="meta-grid">
+                    <span class="meta-label">Quotation ID:</span>
+                    <span class="meta-value">Q-<%= invoice.number %></span>
+                    
+                    <span class="meta-label">Date:</span>
+                    <span class="meta-value"><%= invoice.date %></span>
+                </div>
             </div>
+        </header>
+
+        <!-- Aesthetic Grid (Insta Style) -->
+        <div class="aesthetic-grid">
+            <img src="https://images.unsplash.com/photo-1519225421980-715cb0215aed?q=80&w=800&auto=format&fit=crop" crossorigin="anonymous" class="hero-img">
+            <img src="https://images.unsplash.com/photo-1520854221256-17451cc331bf?q=80&w=800&auto=format&fit=crop" crossorigin="anonymous" class="side-img">
+            <img src="https://images.unsplash.com/photo-1511285560929-80b456fea0bc?q=80&w=800&auto=format&fit=crop" crossorigin="anonymous" class="side-img">
+        </div>
+
+        <!-- Billing Section -->
+        <div class="billing-section">
+            <div class="billing-block left">
+                <div class="section-label">Quotation For</div>
+                <div class="client-name"><%= client.name %></div>
+                
+                <% if (client.phone && client.phone !== '-') { %>
+                <div class="client-details-row">
+                    <span class="client-details-label">Phone:</span>
+                    <span class="client-details-val"><%= client.phone %></span>
+                </div>
+                <% } %>
+                
+                <% if (client.address && client.address !== '-') { %>
+                <div class="client-details-row">
+                    <span class="client-details-label">Address:</span>
+                    <span class="client-details-val"><%= client.address %></span>
+                </div>
+                <% } %>
+            </div>
+            
+            <div class="billing-block right">
+                <div class="inner-details">
+                    <div class="section-label">Event Details</div>
+                    
+                    <div class="client-details-row">
+                        <span class="client-details-label">Event Type:</span>
+                        <span class="client-details-val"><%= event.type || '-' %></span>
+                    </div>
+                    
+                    <% if (event.date && event.date !== '-') { %>
+                    <div class="client-details-row">
+                        <span class="client-details-label">Event Date:</span>
+                        <span class="client-details-val"><%= event.date %></span>
+                    </div>
+                    <% } %>
+                    
+                    <% if (event.venue && event.venue !== '-') { %>
+                    <div class="client-details-row">
+                        <span class="client-details-label">Venue:</span>
+                        <span class="client-details-val"><%= event.venue %></span>
+                    </div>
+                    <% } %>
+                    
+                    <% if (event.guestCount && event.guestCount !== '-') { %>
+                    <div class="client-details-row">
+                        <span class="client-details-label">Guest Count:</span>
+                        <span class="client-details-val"><%= event.guestCount %></span>
+                    </div>
+                    <% } %>
+                </div>
+            </div>
+        </div>
 
             <!-- Services Table -->
             <table class="services-table luxury-table">
@@ -130,26 +143,44 @@
             </table>
 
             <!-- Bottom Section -->
-            <div class="bottom-wrapper" style="justify-content: flex-end; margin-top: 30px;">
-                <!-- Summary -->
-                <div class="summary-section">
+            <div class="bottom-wrapper" style="margin-top: 30px; display: flex; justify-content: space-between; align-items: flex-start;">
+                <!-- Left: Terms and Conditions -->
+                <div class="terms-section" style="width: 55%; padding-right: 20px;">
+                    <div class="terms-title" style="font-size: 11px; font-weight: 700; color: #111827; margin-bottom: 8px; text-transform: uppercase;">Terms & Conditions</div>
+                    <ul class="terms-list" style="padding-left: 15px; font-size: 9px; line-height: 1.6; color: #6b7280; margin: 0; list-style-type: disc;">
+                        <li><strong>Advance Payment:</strong> 50% advance payment required for booking.</li>
+                        <li><strong>Balance Payment:</strong> Remaining balance due before the event date.</li>
+                        <li><strong>Delivery:</strong> All edited deliverables will be provided within 3–4 weeks.</li>
+                        <li><strong>Travel & Stay:</strong> Travel & accommodation outside the city are excluded.</li>
+                        <li><strong>Raw Material:</strong> Raw footage and photos available upon request.</li>
+                    </ul>
+                </div>
+
+                <!-- Right: Summary Totals exactly aligned -->
+                <div class="summary-section" style="width: 40%;">
                     <table class="summary-table">
                         <tr>
-                            <td class="s-label">Subtotal</td>
-                            <td class="s-val">
+                            <td class="s-label" style="text-align: left; font-size: 12px; color: #4b5563;">Subtotal</td>
+                            <td class="s-val" style="text-align: right; font-size: 12px;">
                                 <%= subtotal %>
                             </td>
                         </tr>
                         <tr>
-                            <td class="s-label">Taxes</td>
-                            <td class="s-val">
+                            <td class="s-label" style="text-align: left; font-size: 12px; color: #4b5563;">Taxes</td>
+                            <td class="s-val" style="text-align: right; font-size: 12px;">
                                 <%= tax %>
                             </td>
                         </tr>
                         <tr class="total-row">
-                            <td class="s-label">TOTAL</td>
-                            <td class="s-val">
-                                <%= total %>
+                            <td class="s-label" style="text-align: left; font-weight: 700; font-size: 14px; color: #111827;">TOTAL</td>
+                            <td class="s-val" style="text-align: right; font-weight: 700; font-size: 14px; color: #111827;">
+                                <% if (String(total).includes('+')) { %>
+                                    <% var parts = String(total).split('+'); %>
+                                    <div><%= parts[0].trim() %></div>
+                                    <div class="tax-hint" style="font-size: 10px; font-weight: normal; color: #b59048;">+ <%= parts[1].trim() %></div>
+                                <% } else { %>
+                                    <%= total %>
+                                <% } %>
                             </td>
                         </tr>
                     </table>
@@ -157,57 +188,14 @@
             </div>
 
             <!-- Footer -->
-            <div class="footer-row">
-                <div class="footer-item">
-                    <span class="f-icon">📷</span> Aura Studio
-                </div>
-                <div class="footer-item">
-                    <span class="f-icon">📱</span> @auraweddings
-                </div>
-                <div class="footer-item">
-                    <span class="f-icon">📞</span> +91 080 234 5789
-                </div>
-                <div class="footer-item">
-                    <span class="f-icon">🌐</span> auraweddings.com
-                </div>
+            <div class="footer-row" style="margin-top: auto; padding-top: 20px; font-size: 11px; color: #888; display: flex; justify-content: space-between;">
+                <div class="footer-item"><span class="f-icon">📷</span> Aura Studio</div>
+                <div class="footer-item"><span class="f-icon">📱</span> @auraweddings</div>
+                <div class="footer-item"><span class="f-icon">📞</span> +91 080 234 5789</div>
+                <div class="footer-item"><span class="f-icon">🌐</span> auraweddings.com</div>
             </div>
 
         </div> <!-- End of Page 1 -->
-
-        <!-- PAGE 2: Terms & Conditions -->
-        <div class="page">
-            <div class="main-heading-container" style="margin-top: 10mm; margin-bottom: 20mm;">
-                <h1 class="main-title" style="font-size: 40px;">TERMS & CONDITIONS</h1>
-                <div class="gold-divider"></div>
-            </div>
-
-            <div class="terms-section" style="width: 100%; flex: 1; padding: 0;">
-                <ul class="terms-list" style="font-size: 13px; line-height: 2.2; padding-left: 20px; color: #4a4a4a;">
-                    <li><strong>1. Advance Payment:</strong> 50% advance payment required for booking confirmation.</li>
-                    <li><strong>2. Balance Payment:</strong> Remaining balance due before the event date.</li>
-                    <li><strong>3. Delivery Timeline:</strong> All edited deliverables will be provided within 3–4 weeks from the event date.</li>
-                    <li><strong>4. Travel & Stay:</strong> Travel & accommodation outside the city are excluded and will be borne by the client.</li>
-                    <li><strong>5. Raw Material:</strong> Raw footage and photos available upon request (subject to hard-drive conditions).</li>
-                    <li><strong>6. Copyright & Usage:</strong> Copyrights of the content will be retained by Aura Cinematic Weddings for promotional use unless mutually agreed otherwise.</li>
-                </ul>
-            </div>
-
-            <!-- Footer for Page 2 -->
-            <div class="footer-row" style="margin-top: auto;">
-                <div class="footer-item">
-                    <span class="f-icon">📷</span> Aura Studio
-                </div>
-                <div class="footer-item">
-                    <span class="f-icon">📱</span> @auraweddings
-                </div>
-                <div class="footer-item">
-                    <span class="f-icon">📞</span> +91 080 234 5789
-                </div>
-                <div class="footer-item">
-                    <span class="f-icon">🌐</span> auraweddings.com
-                </div>
-            </div>
-        </div>
 
 </body>
 

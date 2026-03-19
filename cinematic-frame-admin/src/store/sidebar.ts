@@ -1,11 +1,17 @@
 import { create } from 'zustand';
 
-interface SidebarState {
+interface UIState {
   collapsed: boolean;
-  toggle: () => void;
+  headerTitle: string;
+  headerSubtitle?: string;
+  toggleSidebar: () => void;
+  setHeaderInfo: (title: string, subtitle?: string) => void;
 }
 
-export const useSidebarStore = create<SidebarState>((set) => ({
+export const useUIStore = create<UIState>((set) => ({
   collapsed: false,
-  toggle: () => set((state) => ({ collapsed: !state.collapsed })),
+  headerTitle: "Aura Admin",
+  headerSubtitle: "Cinematic Weddings",
+  toggleSidebar: () => set((state) => ({ collapsed: !state.collapsed })),
+  setHeaderInfo: (title, subtitle) => set({ headerTitle: title, headerSubtitle: subtitle }),
 }));

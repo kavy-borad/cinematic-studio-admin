@@ -1,5 +1,6 @@
 const Bill = require("../models/Bill");
 const Quotation = require("../models/Quotation");
+const { generateBillPDF } = require("../utils/pdf/generateBill");
 
 const VALID_STATUSES = ["Unpaid", "Partially Paid", "Paid", "Overdue", "Cancelled"];
 
@@ -37,14 +38,26 @@ async function generateNextInvoiceNumber() {
 
 function mapBillResponse(bill) {
     const data = bill.toJSON();
+    let items = data.items;
+    if (typeof items === 'string') {
+        try {
+            items = JSON.parse(items);
+        } catch (e) {
+            items = [];
+        }
+    }
+
     return {
         ...data,
+        items: Array.isArray(items) ? items : [],
         subtotal: Number(data.subtotal),
         gstRate: Number(data.gstRate),
         taxAmount: Number(data.taxAmount),
         totalAmount: Number(data.totalAmount),
         advancePaid: Number(data.advancePaid),
         balanceAmount: Number(data.balanceAmount),
+        venue: data.venue || null,
+        guestCount: data.guestCount || null,
     };
 }
 
@@ -61,15 +74,13 @@ exports.createBill = async (req, res) => {
             eventType,
             eventDate,
             items,
-            subtotal,
             gstRate,
-            taxAmount,
-            totalAmount,
             advancePaid,
-            balanceAmount,
             dueDate,
             status,
             notes,
+            venue,
+            guestCount,
         } = req.body;
 
         let quotation = null;
@@ -97,6 +108,8 @@ exports.createBill = async (req, res) => {
         const finalClientAddress = (clientAddress || quotation?.city || "").trim() || null;
         const finalEventType = (eventType || quotation?.eventType || "").trim();
         const finalEventDate = (eventDate || quotation?.eventDate || "").trim() || null;
+        const finalVenue = (venue || quotation?.venue || "").trim() || null;
+        const finalGuestCount = (guestCount || quotation?.guestCount || "").trim() || null;
 
         if (!finalClientName) {
             return res.status(400).json({ success: false, message: "clientName is required." });
@@ -122,6 +135,8 @@ exports.createBill = async (req, res) => {
             const service = String(item?.service || "").trim();
             const deliverables = String(item?.deliverables || "").trim();
             const price = toMoney(item?.price, `items[${index}].price`);
+            const quantity = Number(item?.quantity) || 1;
+            const amount = toMoney(item?.amount, `items[${index}].amount`) || Number((price * quantity).toFixed(2));
 
             if (!service) {
                 throw new Error(`items[${index}].service is required.`);
@@ -130,16 +145,16 @@ exports.createBill = async (req, res) => {
                 throw new Error(`items[${index}].price is required.`);
             }
 
-            return { service, deliverables, price };
+            return { service, deliverables, price, quantity, amount };
         });
 
-        const computedSubtotal = normalizedItems.reduce((sum, item) => sum + Number(item.price), 0);
-        const finalSubtotal = toMoney(subtotal, "subtotal") ?? Number(computedSubtotal.toFixed(2));
+        const computedSubtotal = normalizedItems.reduce((sum, item) => sum + Number(item.amount), 0);
+        const finalSubtotal = Number(computedSubtotal.toFixed(2));
         const finalGstRate = toMoney(gstRate, "gstRate") ?? 18;
-        const finalTaxAmount = toMoney(taxAmount, "taxAmount") ?? Number(((finalSubtotal * finalGstRate) / 100).toFixed(2));
-        const finalTotalAmount = toMoney(totalAmount, "totalAmount") ?? Number((finalSubtotal + finalTaxAmount).toFixed(2));
+        const finalTaxAmount = Number(((finalSubtotal * finalGstRate) / 100).toFixed(2));
+        const finalTotalAmount = Number((finalSubtotal + finalTaxAmount).toFixed(2));
         const finalAdvancePaid = toMoney(advancePaid, "advancePaid") ?? 0;
-        const finalBalanceAmount = toMoney(balanceAmount, "balanceAmount") ?? Number((finalTotalAmount - finalAdvancePaid).toFixed(2));
+        const finalBalanceAmount = Number((finalTotalAmount - finalAdvancePaid).toFixed(2));
 
         if (finalAdvancePaid > finalTotalAmount) {
             return res.status(400).json({ success: false, message: "advancePaid cannot be greater than totalAmount." });
@@ -174,6 +189,8 @@ exports.createBill = async (req, res) => {
             status: finalStatus,
             dueDate: dueDate || null,
             notes: notes ? String(notes).trim() : null,
+            venue: finalVenue,
+            guestCount: finalGuestCount,
         });
 
         res.status(201).json({
@@ -208,7 +225,7 @@ exports.getBills = async (req, res) => {
     try {
         const { status } = req.query;
         let whereCondition = {};
-        
+
         if (status) {
             whereCondition.status = status;
         }
@@ -240,14 +257,13 @@ exports.updateBill = async (req, res) => {
             eventType,
             eventDate,
             items,
-            subtotal,
             gstRate,
-            taxAmount,
-            totalAmount,
             advancePaid,
             dueDate,
             status,
             notes,
+            venue,
+            guestCount,
         } = req.body;
 
         const bill = await Bill.findByPk(id);
@@ -276,6 +292,8 @@ exports.updateBill = async (req, res) => {
             bill.dueDate = dueDate;
         }
         if (notes !== undefined) bill.notes = notes.trim();
+        if (venue !== undefined) bill.venue = venue.trim();
+        if (guestCount !== undefined) bill.guestCount = guestCount.trim();
 
         if (status !== undefined) {
             const finalStatus = status.trim();
@@ -294,19 +312,22 @@ exports.updateBill = async (req, res) => {
                 const service = String(item?.service || "").trim();
                 const deliverables = String(item?.deliverables || "").trim();
                 const price = toMoney(item?.price, `items[${index}].price`);
+                const quantity = Number(item?.quantity) || 1;
+                const amount = toMoney(item?.amount, `items[${index}].amount`) || Number((price * quantity).toFixed(2));
+
                 if (!service) throw new Error(`items[${index}].service is required.`);
                 if (price === null) throw new Error(`items[${index}].price is required.`);
-                return { service, deliverables, price };
+                return { service, deliverables, price, quantity, amount };
             });
         }
 
         const rawItems = typeof bill.items === "string" ? JSON.parse(bill.items) : bill.items;
-        const computedSubtotal = Array.isArray(rawItems) ? rawItems.reduce((sum, item) => sum + Number(item.price), 0) : 0;
-        bill.subtotal = toMoney(subtotal, "subtotal") ?? Number(computedSubtotal.toFixed(2));
+        const computedSubtotal = Array.isArray(rawItems) ? rawItems.reduce((sum, item) => sum + (Number(item.amount) || Number(item.price) || 0), 0) : 0;
+        bill.subtotal = Number(computedSubtotal.toFixed(2));
         bill.gstRate = toMoney(gstRate, "gstRate") ?? bill.gstRate;
-        bill.taxAmount = toMoney(taxAmount, "taxAmount") ?? Number(((bill.subtotal * bill.gstRate) / 100).toFixed(2));
-        bill.totalAmount = toMoney(totalAmount, "totalAmount") ?? Number((bill.subtotal + bill.taxAmount).toFixed(2));
-        
+        bill.taxAmount = Number(((bill.subtotal * bill.gstRate) / 100).toFixed(2));
+        bill.totalAmount = Number((bill.subtotal + bill.taxAmount).toFixed(2));
+
         const newAdvancePaid = toMoney(advancePaid, "advancePaid");
         if (newAdvancePaid !== null) bill.advancePaid = newAdvancePaid;
 
@@ -372,6 +393,62 @@ exports.updateBillStatus = async (req, res) => {
             success: true,
             message: `Bill status updated to ${finalStatus}.`,
             data: mapBillResponse(bill),
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// GET /api/bills/:id/pdf
+exports.downloadBillPDF = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const bill = await Bill.findByPk(id);
+
+        if (!bill) {
+            return res.status(404).json({ success: false, message: "Bill not found." });
+        }
+
+        const billData = mapBillResponse(bill);
+
+        // Find associated quotation for extra fields (venue, guestCount)
+        if (bill.quotationId) {
+            const quotation = await Quotation.findByPk(bill.quotationId);
+            if (quotation) {
+                billData.venue = bill.venue || quotation.venue;
+                billData.guestCount = bill.guestCount || quotation.guestCount;
+            }
+        } else {
+            billData.venue = bill.venue;
+            billData.guestCount = bill.guestCount;
+        }
+
+        const pdfBuffer = await generateBillPDF(billData);
+
+        const fileName = `Bill_${bill.invoiceNumber || id}.pdf`;
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
+        res.send(pdfBuffer);
+    } catch (error) {
+        console.error("PDF Generation Error:", error);
+        res.status(500).json({ success: false, message: "Failed to generate PDF.", error: error.message });
+    }
+};
+// DELETE /api/bills/:id
+exports.deleteBill = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const bill = await Bill.findByPk(id);
+
+        if (!bill) {
+            return res.status(404).json({ success: false, message: "Bill not found." });
+        }
+
+        await bill.destroy();
+
+        res.status(200).json({
+            success: true,
+            message: "Bill deleted successfully.",
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });

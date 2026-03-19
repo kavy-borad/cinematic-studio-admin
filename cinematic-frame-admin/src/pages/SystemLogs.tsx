@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Header } from "@/components/layout/Header";
+import { useUIStore } from "@/store/sidebar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -251,6 +251,7 @@ const TAB_TYPE: Record<Tab, string> = {
 };
 
 export default function SystemLogs() {
+    const setHeaderInfo = useUIStore((s) => s.setHeaderInfo);
     const [logs, setLogs] = useState<LogEntry[]>([]);
     const [stats, setStats] = useState<LogStats | null>(null);
     const [loading, setLoading] = useState(true);
@@ -284,6 +285,10 @@ export default function SystemLogs() {
         },
         [activeTab, search]
     );
+
+    useEffect(() => {
+        setHeaderInfo("API Log Viewer", "Real-time request & response monitor");
+    }, [setHeaderInfo]);
 
     // Initial + refetch on tab/search change
     useEffect(() => {
@@ -328,9 +333,7 @@ export default function SystemLogs() {
 
     // ─── Render ─────────────────────────────────────────────────────────────────
     return (
-        <div className="flex flex-col h-screen bg-background overflow-hidden">
-            <Header title="API Log Viewer" subtitle="Real-time request & response monitor" />
-
+        <div className="flex flex-col h-[calc(100vh-64px)] overflow-hidden">
             {/* ── Top bar ─────────────────────────────────────────────────────────── */}
             <div className="flex items-center justify-between px-4 py-2 border-b border-white/8 bg-card/60 backdrop-blur-sm flex-shrink-0">
                 {/* Connection badge */}

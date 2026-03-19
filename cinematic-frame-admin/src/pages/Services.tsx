@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { Header } from "@/components/layout/Header";
+import { useUIStore } from "@/store/sidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -54,6 +54,7 @@ const emptyForm = {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function Services() {
+  const setHeaderInfo = useUIStore((s) => s.setHeaderInfo);
   const [services, setServices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(emptyForm);
@@ -78,6 +79,10 @@ export default function Services() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    setHeaderInfo("Services & Pricing", "Manage your service offerings");
+  }, [setHeaderInfo]);
 
   useEffect(() => { fetchServices(); }, []);
 
@@ -161,7 +166,7 @@ export default function Services() {
   // ─── POST /api/services ──────────────────────────────────────────────────
   const handleSave = async () => {
     if (!form.title.trim()) {
-      toast.error("Title required hai!");
+      toast.error("Title required!");
       return;
     }
 
@@ -210,19 +215,14 @@ export default function Services() {
   // ─── Render ───────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <>
-        <Header title="Services & Pricing" subtitle="Manage your service offerings" />
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
-      </>
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
     );
   }
 
   return (
-    <>
-      <Header title="Services & Pricing" subtitle="Manage your service offerings" />
-
+    <div className="p-6 space-y-8">
       {/* Hidden thumbnail input */}
       <input
         ref={thumbRef}
@@ -232,174 +232,171 @@ export default function Services() {
         onChange={handleThumbChange}
       />
 
-      <div className="p-6 space-y-8">
+      {/* ── Services Table ────────────────────────────────────────────── */}
+      <Card className="glass-card">
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base font-sans font-semibold">Services</CardTitle>
+            <Button size="sm" className="gap-2" onClick={openAdd}>
+              <Plus className="h-4 w-4" /> Add Service
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow className="border-border/50 hover:bg-transparent">
+                <TableHead className="text-muted-foreground">Thumbnail</TableHead>
+                <TableHead className="text-muted-foreground">Service</TableHead>
+                <TableHead className="text-muted-foreground">Short Desc</TableHead>
+                <TableHead className="text-muted-foreground">Starting Price</TableHead>
+                <TableHead className="text-muted-foreground">Status</TableHead>
+                <TableHead className="text-muted-foreground">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {standalone.length > 0 ? standalone.map((s) => {
+                const Icon = iconMap[s.icon] || Camera;
+                const thumbUrl = resolveImg(s.thumbnail);
+                return (
+                  <TableRow key={s.id} className="border-border/50 hover:bg-muted/20 transition-colors">
+                    {/* Thumbnail */}
+                    <TableCell>
+                      {thumbUrl ? (
+                        <img
+                          src={thumbUrl}
+                          alt={s.title}
+                          className="h-10 w-14 object-cover rounded-lg border border-border"
+                        />
+                      ) : (
+                        <div className="h-10 w-14 rounded-lg bg-primary/10 flex items-center justify-center border border-border">
+                          <Icon className="h-4 w-4 text-primary" />
+                        </div>
+                      )}
+                    </TableCell>
 
-        {/* ── Services Table ────────────────────────────────────────────── */}
-        <Card className="glass-card">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base font-sans font-semibold">Services</CardTitle>
-              <Button size="sm" className="gap-2" onClick={openAdd}>
-                <Plus className="h-4 w-4" /> Add Service
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow className="border-border/50 hover:bg-transparent">
-                  <TableHead className="text-muted-foreground">Thumbnail</TableHead>
-                  <TableHead className="text-muted-foreground">Service</TableHead>
-                  <TableHead className="text-muted-foreground">Short Desc</TableHead>
-                  <TableHead className="text-muted-foreground">Starting Price</TableHead>
-                  <TableHead className="text-muted-foreground">Status</TableHead>
-                  <TableHead className="text-muted-foreground">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {standalone.length > 0 ? standalone.map((s) => {
-                  const Icon = iconMap[s.icon] || Camera;
-                  const thumbUrl = resolveImg(s.thumbnail);
-                  return (
-                    <TableRow key={s.id} className="border-border/50 hover:bg-muted/20 transition-colors">
-                      {/* Thumbnail */}
-                      <TableCell>
-                        {thumbUrl ? (
-                          <img
-                            src={thumbUrl}
-                            alt={s.title}
-                            className="h-10 w-14 object-cover rounded-lg border border-border"
-                          />
-                        ) : (
-                          <div className="h-10 w-14 rounded-lg bg-primary/10 flex items-center justify-center border border-border">
-                            <Icon className="h-4 w-4 text-primary" />
-                          </div>
+                    {/* Title */}
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="font-medium">{s.title}</span>
+                        {s.slug && (
+                          <span className="text-[10px] text-muted-foreground font-mono">/{s.slug}</span>
                         )}
-                      </TableCell>
+                        {s.popular && (
+                          <Badge className="mt-1 text-[10px] w-fit bg-primary/20 text-primary border-primary/30" variant="outline">
+                            Popular
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
 
-                      {/* Title */}
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span className="font-medium">{s.title}</span>
-                          {s.slug && (
-                            <span className="text-[10px] text-muted-foreground font-mono">/{s.slug}</span>
-                          )}
-                          {s.popular && (
-                            <Badge className="mt-1 text-[10px] w-fit bg-primary/20 text-primary border-primary/30" variant="outline">
-                              Popular
-                            </Badge>
-                          )}
-                        </div>
-                      </TableCell>
+                    {/* Short Description */}
+                    <TableCell className="text-sm text-muted-foreground max-w-[200px]">
+                      <span className="line-clamp-2">{s.shortDescription || s.description || "—"}</span>
+                    </TableCell>
 
-                      {/* Short Description */}
-                      <TableCell className="text-sm text-muted-foreground max-w-[200px]">
-                        <span className="line-clamp-2">{s.shortDescription || s.description || "—"}</span>
-                      </TableCell>
+                    {/* Price */}
+                    <TableCell className="font-semibold text-primary">
+                      {s.startingPrice || "—"}
+                    </TableCell>
 
-                      {/* Price */}
-                      <TableCell className="font-semibold text-primary">
-                        {s.startingPrice || "—"}
-                      </TableCell>
+                    {/* Status */}
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={`text-xs ${s.isActive !== false
+                            ? "border-green-500/40 text-green-500 bg-green-500/10"
+                            : "border-muted text-muted-foreground"
+                          }`}
+                      >
+                        {s.isActive !== false ? "Active" : "Inactive"}
+                      </Badge>
+                    </TableCell>
 
-                      {/* Status */}
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={`text-xs ${s.isActive !== false
-                              ? "border-green-500/40 text-green-500 bg-green-500/10"
-                              : "border-muted text-muted-foreground"
-                            }`}
+                    {/* Actions */}
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(s)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost" size="icon"
+                          className="h-8 w-8 hover:text-destructive"
+                          onClick={() => handleDelete(s.id)}
                         >
-                          {s.isActive !== false ? "Active" : "Inactive"}
-                        </Badge>
-                      </TableCell>
-
-                      {/* Actions */}
-                      <TableCell>
-                        <div className="flex gap-1">
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(s)}>
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost" size="icon"
-                            className="h-8 w-8 hover:text-destructive"
-                            onClick={() => handleDelete(s.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                }) : (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                      No services found. Add your first service!
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-
-        {/* ── Packages Grid ─────────────────────────────────────────────── */}
-        {packages.length > 0 && (
-          <div>
-            <h2 className="text-lg font-display font-semibold mb-4">Packages</h2>
-            <motion.div
-              variants={container}
-              initial="hidden"
-              animate="show"
-              className="grid grid-cols-1 md:grid-cols-3 gap-6"
-            >
-              {packages.map((pkg) => {
-                const isGold = pkg.packageName?.toLowerCase() === "gold";
-                const thumbUrl = resolveImg(pkg.thumbnail);
-                return (
-                  <motion.div key={pkg.id} variants={itemAnim}>
-                    <Card className={`glass-card stat-card-hover relative overflow-hidden ${isGold ? "border-primary/40 gold-glow" : ""}`}>
-                      {isGold && (
-                        <div className="absolute top-0 right-0 bg-primary text-primary-foreground text-[10px] font-bold px-3 py-1 rounded-bl-lg">
-                          MOST POPULAR
-                        </div>
-                      )}
-                      {thumbUrl && (
-                        <img src={thumbUrl} alt={pkg.packageName} className="w-full h-32 object-cover" />
-                      )}
-                      <CardContent className="p-6">
-                        <h3 className="font-display text-xl font-semibold">{pkg.packageName}</h3>
-                        <p className="text-2xl font-bold text-primary mt-2">{pkg.startingPrice || "—"}</p>
-                        {pkg.shortDescription && (
-                          <p className="text-xs text-muted-foreground mt-1">{pkg.shortDescription}</p>
-                        )}
-                        <p className="text-xs text-muted-foreground mb-4">per event</p>
-                        <ul className="space-y-2">
-                          {(pkg.features || []).map((f: string) => (
-                            <li key={f} className="text-sm text-foreground/80 flex items-center gap-2">
-                              <span className="h-1.5 w-1.5 rounded-full bg-primary flex-shrink-0" />
-                              {f}
-                            </li>
-                          ))}
-                        </ul>
-                        <div className="flex gap-2 mt-6">
-                          <Button className="flex-1" variant={isGold ? "default" : "secondary"} onClick={() => openEdit(pkg)}>
-                            Edit Package
-                          </Button>
-                          <Button variant="ghost" size="icon" className="hover:text-destructive" onClick={() => handleDelete(pkg.id)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </motion.div>
                 );
-              })}
-            </motion.div>
-          </div>
-        )}
-      </div>
+              }) : (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                    No services found. Add your first service!
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* ── Packages Grid ─────────────────────────────────────────────── */}
+      {packages.length > 0 && (
+        <div>
+          <h2 className="text-lg font-display font-semibold mb-4">Packages</h2>
+          <motion.div
+            variants={container}
+            initial="hidden"
+            animate="show"
+            className="grid grid-cols-1 md:grid-cols-3 gap-6"
+          >
+            {packages.map((pkg) => {
+              const isGold = pkg.packageName?.toLowerCase() === "gold";
+              const thumbUrl = resolveImg(pkg.thumbnail);
+              return (
+                <motion.div key={pkg.id} variants={itemAnim}>
+                  <Card className={`glass-card stat-card-hover relative overflow-hidden ${isGold ? "border-primary/40 gold-glow" : ""}`}>
+                    {isGold && (
+                      <div className="absolute top-0 right-0 bg-primary text-primary-foreground text-[10px] font-bold px-3 py-1 rounded-bl-lg">
+                        MOST POPULAR
+                      </div>
+                    )}
+                    {thumbUrl && (
+                      <img src={thumbUrl} alt={pkg.packageName} className="w-full h-32 object-cover" />
+                    )}
+                    <CardContent className="p-6">
+                      <h3 className="font-display text-xl font-semibold">{pkg.packageName}</h3>
+                      <p className="text-2xl font-bold text-primary mt-2">{pkg.startingPrice || "—"}</p>
+                      {pkg.shortDescription && (
+                        <p className="text-xs text-muted-foreground mt-1">{pkg.shortDescription}</p>
+                      )}
+                      <p className="text-xs text-muted-foreground mb-4">per event</p>
+                      <ul className="space-y-2">
+                        {(pkg.features || []).map((f: string) => (
+                          <li key={f} className="text-sm text-foreground/80 flex items-center gap-2">
+                            <span className="h-1.5 w-1.5 rounded-full bg-primary flex-shrink-0" />
+                            {f}
+                          </li>
+                        ))}
+                      </ul>
+                      <div className="flex gap-2 mt-6">
+                        <Button className="flex-1" variant={isGold ? "default" : "secondary"} onClick={() => openEdit(pkg)}>
+                          Edit Package
+                        </Button>
+                        <Button variant="ghost" size="icon" className="hover:text-destructive" onClick={() => handleDelete(pkg.id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              );
+            })}
+          </motion.div>
+        </div>
+      )}
 
       {/* ═══════════════════════════════════════════════════════════════════
           ADD / EDIT SERVICE SHEET
@@ -601,6 +598,6 @@ export default function Services() {
           </div>
         </SheetContent>
       </Sheet>
-    </>
+    </div>
   );
 }

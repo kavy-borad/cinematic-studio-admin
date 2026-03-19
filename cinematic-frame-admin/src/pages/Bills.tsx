@@ -1,15 +1,25 @@
 import { useEffect, useState } from "react";
-import { Header } from "@/components/layout/Header";
+import { useUIStore } from "@/store/sidebar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Edit2, Eye, Trash2, Loader2, Save, X, Receipt, PlusCircle, Plus } from "lucide-react";
+import { Edit2, Eye, Trash2, Loader2, Save, X, Receipt, PlusCircle, Plus, Download } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { createBill, deleteQuotation, getQuotations, updateQuotation, getBills, updateBill, updateBillStatus } from "@/lib/api";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { createBill, deleteQuotation, getQuotations, updateQuotation, getBills, updateBill, updateBillStatus, downloadBillPDF, deleteBill } from "@/lib/api";
 
 const statusColor: Record<string, string> = {
   New: "bg-blue-500/10 text-blue-500 border-blue-500/20",
@@ -21,6 +31,7 @@ const statusColor: Record<string, string> = {
 };
 
 export default function Bills() {
+  const setHeaderInfo = useUIStore((s) => s.setHeaderInfo);
   const [activeTab, setActiveTab] = useState("quotations"); // 'quotations' | 'bills'
   const [quotations, setQuotations] = useState<any[]>([]);
   const [bills, setBills] = useState<any[]>([]);
@@ -42,9 +53,12 @@ export default function Bills() {
     clientName: '', clientEmail: '', clientPhone: '', clientAddress: '',
     eventType: '', eventDate: '', dueDate: '', notes: '',
     gstRate: 18, advancePaid: 0, status: 'Unpaid' as const,
-    items: [{ service: '', deliverables: '', price: '' }],
+    items: [{ service: '', deliverables: '', price: '', quantity: 1 }],
   });
   const [createForm, setCreateForm] = useState<any>(defaultCreateForm());
+
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: number; type: "quotation" | "bill" } | null>(null);
 
   const hasValue = (value: unknown) => {
     if (value === null || value === undefined) return false;
@@ -68,18 +82,19 @@ export default function Bills() {
     const raw = String(value ?? "").toLowerCase().trim();
     if (!raw) return 0;
 
-    let cleaned = raw.replace(/,/g, "").replace(/₹|rs\.?/g, "").trim();
     let multiplier = 1;
-
-    if (cleaned.includes("lakh") || /\d\s*l$/.test(cleaned)) {
+    if (raw.includes("lakh") || /\d\s*l$/.test(raw)) {
       multiplier = 100000;
-      cleaned = cleaned.replace(/lakhs?|l/g, "").trim();
-    } else if (cleaned.includes("k")) {
+    } else if (raw.includes("k")) {
       multiplier = 1000;
-      cleaned = cleaned.replace(/k/g, "").trim();
     }
 
+    const match = raw.match(/[\d,]+\.?\d*/); 
+    if (!match) return 0;
+
+    let cleaned = match[0].replace(/,/g, "");
     const numeric = Number(cleaned);
+
     return Number.isFinite(numeric) ? Number((numeric * multiplier).toFixed(2)) : 0;
   };
 
@@ -126,9 +141,7 @@ export default function Bills() {
   };
 
   const canGenerateBill = (quotation: any) => {
-    if (!quotation) return false;
-    const subtotal = parseNumber(quotation.budget);
-    return subtotal > 0;
+    return !!quotation;
   };
 
   const buildBillPayload = (quotation: any) => {
@@ -143,6 +156,8 @@ export default function Bills() {
       service,
       deliverables: requirementsMap[service] || requirementsMap.global || "Professional coverage as discussed",
       price: perItemPrice,
+      quantity: 1,
+      amount: perItemPrice,
     }));
 
     const subtotal = Number(items.reduce((sum, item) => sum + Number(item.price || 0), 0).toFixed(2));
@@ -172,6 +187,8 @@ export default function Bills() {
       dueDate,
       status: "Unpaid" as const,
       notes: requirementsMap.global || undefined,
+      venue: quotation.venue || undefined,
+      guestCount: quotation.guestCount || undefined,
     };
   };
 
@@ -262,7 +279,7 @@ export default function Bills() {
   };
 
   const handleQuickStatusUpdate = async (billId: number, newStatus: string) => {
-    toast.loading("Updating status...", { id: "status_update" });
+    toast.loading("Updating status", { id: "status_update" });
     try {
       const res = await updateBillStatus(billId, newStatus);
       if (res.success) {
@@ -276,52 +293,95 @@ export default function Bills() {
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm("Are you sure you want to delete this bill?")) return;
+  const handleDelete = (id: number) => {
+    setDeleteTarget({ id, type: "quotation" });
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleDeleteBill = (id: number) => {
+    setDeleteTarget({ id, type: "bill" });
+    setDeleteConfirmOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    const { id, type } = deleteTarget;
+    setDeleteConfirmOpen(false);
+
     try {
-      const res = await deleteQuotation(id);
-      if (res.success) {
-        toast.success("Bill deleted successfully");
-        setQuotations((prev) => prev.filter((q) => q.id !== id));
-        if (selected?.id === id) {
-          setSelected(null);
-          setIsModalOpen(false);
+      if (type === "quotation") {
+        const res = await deleteQuotation(id);
+        if (res.success) {
+          toast.success("Quotation deleted successfully");
+          setQuotations((prev) => prev.filter((q) => q.id !== id));
+          if (selected?.id === id) {
+            setSelected(null);
+            setIsModalOpen(false);
+          }
+        }
+      } else {
+        const res = await deleteBill(id);
+        if (res.success) {
+          toast.success("Bill deleted successfully");
+          setBills((prev) => prev.filter((b) => b.id !== id));
+          if (selectedBill?.id === id) {
+            setSelectedBill(null);
+            setIsBillModalOpen(false);
+          }
         }
       }
     } catch (error: any) {
-      toast.error(error.response?.data?.message || "Failed to delete");
+      toast.error(error.response?.data?.message || `Failed to delete ${type}`);
+    } finally {
+      setDeleteTarget(null);
     }
   };
 
+
   const handleGenerateBill = async (quotation: any) => {
     try {
-      toast.info("Creating bill...");
       const payload = buildBillPayload(quotation);
       const res = await createBill(payload);
 
       if (res?.success) {
         const invoiceNo = res?.data?.invoiceNumber || "N/A";
-        toast.success(`Bill created successfully (${invoiceNo})`);
-        console.log("[Bills] POST /api/bills response:", res);
+        const billId = res?.data?.id;
+        
+        if (billId) {
+          try {
+            await downloadBillPDF(billId, invoiceNo);
+            toast.success("PDF Downloaded", { icon: <Download className="h-4 w-4" /> });
+          } catch (error) {
+            toast.error("Bill created but PDF download failed");
+          }
+        } else {
+          toast.success(`Bill ${invoiceNo} created successfully`);
+        }
+
+        await Promise.all([fetchQuotations(), fetchBills()]);
       } else {
-        toast.error("Bill creation failed");
+        toast.error("Failed to create bill");
       }
     } catch (error: any) {
       console.error("[Bills] Failed to create bill:", error);
-      toast.error(error?.response?.data?.message || "Failed to create bill.");
+      toast.error(error?.response?.data?.message || "Error generating bill");
     }
   };
 
   // ── Manual Bill Creation ─────────────────────────────────────────────────────
   const computedTotals = (items: any[], gstRate: number) => {
-    const subtotal = items.reduce((s, it) => s + (parseNumber(it.price) || 0), 0);
+    const subtotal = items.reduce((s, it) => {
+      const p = parseNumber(it.price) || 0;
+      const q = Number(it.quantity) || 1;
+      return s + (p * q);
+    }, 0);
     const taxAmount = Number(((subtotal * gstRate) / 100).toFixed(2));
     const totalAmount = Number((subtotal + taxAmount).toFixed(2));
     return { subtotal: Number(subtotal.toFixed(2)), taxAmount, totalAmount };
   };
 
   const handleCreateBill = async () => {
-    const { clientName, clientEmail, eventType, items, gstRate, advancePaid, status, clientPhone, clientAddress, eventDate, dueDate, notes } = createForm;
+    const { clientName, clientEmail, eventType, items, gstRate, advancePaid, status, clientPhone, clientAddress, eventDate, dueDate, notes, venue, guestCount } = createForm;
     if (!clientName.trim()) return toast.error('Client name is required.');
     if (!clientEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(clientEmail)) return toast.error('Valid client email is required.');
     if (!eventType.trim()) return toast.error('Event type is required.');
@@ -347,17 +407,34 @@ export default function Bills() {
           service: it.service.trim(),
           deliverables: it.deliverables?.trim() || '',
           price: parseNumber(it.price),
+          quantity: Number(it.quantity) || 1,
+          amount: Number((parseNumber(it.price) * (Number(it.quantity) || 1)).toFixed(2)),
         })),
         subtotal, gstRate: Number(gstRate) || 18, taxAmount, totalAmount,
         advancePaid: finalAdvance, balanceAmount,
         status,
+        venue: venue?.trim() || undefined,
+        guestCount: guestCount?.trim() || undefined,
       };
       const res = await createBill(payload);
       if (res?.success) {
-        toast.success(`Bill created: ${res.data?.invoiceNumber || ''}`);
+        const invoiceNo = res.data?.invoiceNumber || '';
+        toast.success(`Bill created: ${invoiceNo}`);
         setIsCreateModalOpen(false);
         setCreateForm(defaultCreateForm());
-        await fetchBills();
+
+        const billId = res.data?.id;
+        if (billId) {
+          toast.loading("Generating PDF", { id: `download-${billId}` });
+          try {
+            await downloadBillPDF(billId, invoiceNo);
+            toast.success("Bill downloaded", { id: `download-${billId}` });
+          } catch (error) {
+            toast.error("Download failed", { id: `download-${billId}` });
+          }
+        }
+
+        await Promise.all([fetchQuotations(), fetchBills()]);
         setActiveTab('bills');
       } else {
         toast.error(res?.message || 'Failed to create bill.');
@@ -369,38 +446,36 @@ export default function Bills() {
     }
   };
 
+  useEffect(() => {
+    setHeaderInfo("Billing & Documents", "Manage and generate bills for booked quotations");
+  }, [setHeaderInfo]);
+
   if (loading) {
     return (
-      <>
-        <Header title="Bills" subtitle="Manage and generate bills for booked quotations" />
-        <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
-      </>
+      <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
     );
   }
 
   return (
     <>
-      <Header title="Bills" subtitle="Manage and generate bills for booked quotations" />
       <div className="p-6 space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex bg-muted/30 p-1 rounded-lg w-fit">
             <button
               onClick={() => setActiveTab("quotations")}
-              className={`px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
-                activeTab === "quotations"
+              className={`px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 ${activeTab === "quotations"
                   ? "bg-background text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
-              }`}
+                }`}
             >
               Pending Quotations
             </button>
             <button
               onClick={() => setActiveTab("bills")}
-              className={`px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
-                activeTab === "bills"
+              className={`px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 ${activeTab === "bills"
                   ? "bg-background text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
-              }`}
+                }`}
             >
               All Bills
             </button>
@@ -432,109 +507,122 @@ export default function Bills() {
                   </TableRow>
                 </TableHeader>
                 {activeTab === "quotations" ? (
-                <TableBody>
-                  {quotations.length > 0 ? quotations.map((q) => (
-                    <TableRow
-                      key={q.id}
-                      className="border-border/50 transition-colors hover:bg-muted/20"
-                    >
-                      <TableCell className="font-mono text-xs text-muted-foreground">
-                        B-{String(q.id).padStart(3, "0")}
-                      </TableCell>
-                      <TableCell className="font-medium">{q.name}</TableCell>
-                      <TableCell className="text-sm">{q.eventType}</TableCell>
-                      <TableCell className="font-semibold text-primary">{q.budget || "-"}</TableCell>
-                      <TableCell><Badge variant="outline" className={statusColor[q.status] || ""}>{q.status}</Badge></TableCell>
-                      <TableCell className="text-right pr-6">
-                        <div className="flex gap-2 justify-end">
-                          <Button variant="outline" size="sm" className="h-8 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 border-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                            disabled={!canGenerateBill(q)}
-                            title={!canGenerateBill(q) ? "Cannot generate bill with 0 total. Edit budget first." : ""}
-                            onClick={(e) => {
+                  <TableBody>
+                    {quotations.length > 0 ? quotations.map((q) => (
+                      <TableRow
+                        key={q.id}
+                        className="border-border/50 transition-colors hover:bg-muted/20"
+                      >
+                        <TableCell className="font-mono text-xs text-muted-foreground">
+                          B-{String(q.id).padStart(3, "0")}
+                        </TableCell>
+                        <TableCell className="font-medium">{q.name}</TableCell>
+                        <TableCell className="text-sm">{q.eventType}</TableCell>
+                        <TableCell className="font-semibold text-primary">{q.budget || "-"}</TableCell>
+                        <TableCell><Badge variant="outline" className={statusColor[q.status] || ""}>{q.status}</Badge></TableCell>
+                        <TableCell className="text-right pr-6">
+                          <div className="flex gap-2 justify-end">
+                            <Button variant="outline" size="sm" className="h-8 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 border-indigo-200"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleGenerateBill(q);
+                              }}
+                            >
+                              <Download className="h-4 w-4 mr-1.5" />
+                              Download Bill
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => {
                               e.stopPropagation();
-                              handleGenerateBill(q);
+                              setSelected(q);
+                              setIsEditing(false);
+                              setIsModalOpen(true);
+                            }}>
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-destructive"
+                              onClick={(e) => { e.stopPropagation(); handleDelete(q.id); }}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )) : (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center text-muted-foreground py-8">No booked quotations found to generate bills</TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                ) : (
+                  <TableBody>
+                    {bills.length > 0 ? bills.map((b) => (
+                      <TableRow
+                        key={b.id}
+                        className="border-border/50 transition-colors hover:bg-muted/20"
+                      >
+                        <TableCell className="font-mono text-xs text-muted-foreground">
+                          {b.invoiceNumber}
+                        </TableCell>
+                        <TableCell className="font-medium">{b.clientName}</TableCell>
+                        <TableCell className="text-sm">{b.eventType}</TableCell>
+                        <TableCell className="font-semibold text-primary">₹{b.totalAmount || "0"}</TableCell>
+                        <TableCell>
+                          <select
+                            value={b.status || ""}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              handleQuickStatusUpdate(b.id, e.target.value);
                             }}
+                            className={`flex h-7 w-[130px] rounded-md border text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 px-2 py-1 cursor-pointer font-medium ${b.status === "Paid" ? "bg-green-500/10 text-green-600 border-green-500/20" :
+                                b.status === "Unpaid" ? "bg-orange-500/10 text-orange-600 border-orange-500/20" :
+                                  b.status === "Partially Paid" ? "bg-yellow-500/10 text-yellow-600 border-yellow-500/20" :
+                                    b.status === "Overdue" ? "bg-red-500/10 text-red-600 border-red-500/20" :
+                                      b.status === "Cancelled" ? "bg-gray-500/10 text-gray-600 border-gray-500/20" : ""
+                              }`}
                           >
-                            <Receipt className="h-4 w-4 mr-1.5" />
-                            Generate Bill
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => {
+                            <option value="Unpaid" className="text-foreground bg-background">Unpaid</option>
+                            <option value="Partially Paid" className="text-foreground bg-background">Partially Paid</option>
+                            <option value="Paid" className="text-foreground bg-background">Paid</option>
+                            <option value="Overdue" className="text-foreground bg-background">Overdue</option>
+                            <option value="Cancelled" className="text-foreground bg-background">Cancelled</option>
+                          </select>
+                        </TableCell>
+                        <TableCell className="text-right pr-6">
+                          <div className="flex gap-2 justify-end">
+                          <Button variant="outline" size="sm" className="h-8 text-primary border-primary/20 hover:bg-primary/10" onClick={async (e) => {
                             e.stopPropagation();
-                            setSelected(q);
-                            setIsEditing(false);
-                            setIsModalOpen(true);
+                            try {
+                              await downloadBillPDF(b.id, b.invoiceNumber);
+                              toast.success("PDF Downloaded", { icon: <Download className="h-4 w-4" /> });
+                            } catch (error) {
+                              toast.error("Failed to download invoice. Please try again.");
+                            }
                           }}>
-                            <Eye className="h-4 w-4" />
+                            <Download className="h-4 w-4 mr-1.5" />
+                            Download
                           </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-destructive"
-                            onClick={(e) => { e.stopPropagation(); handleDelete(q.id); }}>
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )) : (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground py-8">No booked quotations found to generate bills</TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              ) : (
-                <TableBody>
-                  {bills.length > 0 ? bills.map((b) => (
-                    <TableRow
-                      key={b.id}
-                      className="border-border/50 transition-colors hover:bg-muted/20"
-                    >
-                      <TableCell className="font-mono text-xs text-muted-foreground">
-                        {b.invoiceNumber}
-                      </TableCell>
-                      <TableCell className="font-medium">{b.clientName}</TableCell>
-                      <TableCell className="text-sm">{b.eventType}</TableCell>
-                      <TableCell className="font-semibold text-primary">₹{b.totalAmount || "0"}</TableCell>
-                      <TableCell>
-                        <select
-                          value={b.status || ""}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            handleQuickStatusUpdate(b.id, e.target.value);
-                          }}
-                          className={`flex h-7 w-[130px] rounded-md border text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 px-2 py-1 cursor-pointer font-medium ${
-                            b.status === "Paid" ? "bg-green-500/10 text-green-600 border-green-500/20" :
-                            b.status === "Unpaid" ? "bg-orange-500/10 text-orange-600 border-orange-500/20" :
-                            b.status === "Partially Paid" ? "bg-yellow-500/10 text-yellow-600 border-yellow-500/20" :
-                            b.status === "Overdue" ? "bg-red-500/10 text-red-600 border-red-500/20" :
-                            b.status === "Cancelled" ? "bg-gray-500/10 text-gray-600 border-gray-500/20" : ""
-                          }`}
-                        >
-                          <option value="Unpaid" className="text-foreground bg-background">Unpaid</option>
-                          <option value="Partially Paid" className="text-foreground bg-background">Partially Paid</option>
-                          <option value="Paid" className="text-foreground bg-background">Paid</option>
-                          <option value="Overdue" className="text-foreground bg-background">Overdue</option>
-                          <option value="Cancelled" className="text-foreground bg-background">Cancelled</option>
-                        </select>
-                      </TableCell>
-                      <TableCell className="text-right pr-6">
-                        <div className="flex gap-2 justify-end">
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedBill(b);
-                            setEditBillForm(b);
-                            setIsBillEditing(false);
-                            setIsBillModalOpen(true);
-                          }}>
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )) : (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground py-8">No bills found</TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              )}
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedBill(b);
+                              setEditBillForm(b);
+                              setIsBillEditing(false);
+                              setIsBillModalOpen(true);
+                            }}>
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-destructive"
+                              onClick={(e) => { e.stopPropagation(); handleDeleteBill(b.id); }}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )) : (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center text-muted-foreground py-8">No bills found</TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                )}
               </Table>
             </CardContent>
           </Card>
@@ -549,13 +637,11 @@ export default function Bills() {
               <DialogHeader className="flex flex-row items-center justify-between border-b border-border/50 pb-3 -mt-2 space-y-0 text-left">
                 <DialogTitle className="text-base font-sans font-semibold">Pending Quotation Details</DialogTitle>
                 <div className="flex gap-1 pr-4">
-                  <Button variant="outline" size="sm" className="h-7 border-indigo-200 hover:border-indigo-400 text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={!canGenerateBill(selected)}
-                    title={!canGenerateBill(selected) ? "Cannot generate bill with 0 total. Set a budget first." : ""}
+                  <Button variant="outline" size="sm" className="h-7 border-indigo-200 hover:border-indigo-400 text-indigo-600 hover:bg-indigo-50"
                     onClick={() => handleGenerateBill(selected)}
                   >
-                    <Receipt className="h-4 w-4 mr-1.5" />
-                    Generate
+                    <Download className="h-4 w-4 mr-1.5" />
+                    Download
                   </Button>
                   {!isEditing ? (
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditForm(selected); setIsEditing(true); }}>
@@ -592,7 +678,7 @@ export default function Bills() {
                       <div className="grid grid-cols-3 gap-2 items-center"><span className="text-xs text-muted-foreground">Venue</span><Input name="venue" value={editForm.venue || ""} onChange={handleEditChange} className="col-span-2 h-7 text-sm" /></div>
                       <div className="grid grid-cols-3 gap-2 items-center"><span className="text-xs text-muted-foreground">Guest Count</span><Input name="guestCount" value={editForm.guestCount || ""} onChange={handleEditChange} className="col-span-2 h-7 text-sm" /></div>
                       <div className="grid grid-cols-3 gap-2 items-center"><span className="text-xs text-muted-foreground items-start pt-1">Functions</span><Textarea name="functions" value={editForm.functions || ""} onChange={handleEditChange} className="col-span-2 text-sm min-h-[60px]" /></div>
-                      
+
                       {(() => {
                         // Parse current services & descriptions from editForm
                         let srvs: string[] = [];
@@ -748,7 +834,7 @@ export default function Bills() {
                             <div>
                               <span className="text-xs text-muted-foreground block mb-1">Services Requested</span>
                               <div className="flex flex-wrap gap-1">
-                                  {(() => {
+                                {(() => {
                                   let viewSrvs: string[] = [];
                                   if (Array.isArray(selected.servicesRequested)) {
                                     viewSrvs = selected.servicesRequested;
@@ -815,6 +901,20 @@ export default function Bills() {
               <DialogHeader className="flex flex-row items-center justify-between border-b border-border/50 pb-3 -mt-2 space-y-0 text-left">
                 <DialogTitle className="text-base font-sans font-semibold">Generated Bill Invoice</DialogTitle>
                 <div className="flex gap-1 pr-4">
+                  <Button variant="outline" size="sm" className="h-7 border-indigo-200 hover:border-indigo-400 text-indigo-600 hover:bg-indigo-50"
+                    onClick={async () => {
+                      toast.loading("Generating PDF", { id: `download-modal-${selectedBill.id}` });
+                      try {
+                        await downloadBillPDF(selectedBill.id, selectedBill.invoiceNumber);
+                        toast.success("Bill downloaded successfully", { id: `download-modal-${selectedBill.id}` });
+                      } catch (error) {
+                        toast.error("Failed to download bill", { id: `download-modal-${selectedBill.id}` });
+                      }
+                    }}
+                  >
+                    <Download className="h-4 w-4 mr-1.5" />
+                    Download
+                  </Button>
                   {!isBillEditing ? (
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditBillForm(selectedBill); setIsBillEditing(true); }}>
                       <Edit2 className="h-4 w-4" />
@@ -859,7 +959,9 @@ export default function Bills() {
                       {renderReadOnlyRow("Email", selectedBill.clientEmail, "text-sm break-all text-right")}
                       {renderReadOnlyRow("Phone", selectedBill.clientPhone)}
                       {renderReadOnlyRow("Event Type", selectedBill.eventType)}
-                      
+                      {renderReadOnlyRow("Venue", selectedBill.venue)}
+                      {renderReadOnlyRow("Guest Count", selectedBill.guestCount)}
+
                       <div className="py-2 border-y border-border/50 my-2 space-y-2">
                         {renderReadOnlyRow("Subtotal", "₹" + selectedBill.subtotal)}
                         {renderReadOnlyRow(`Tax (${selectedBill.gstRate}%)`, "₹" + selectedBill.taxAmount)}
@@ -870,18 +972,30 @@ export default function Bills() {
 
                       {Array.isArray(selectedBill.items) && selectedBill.items.length > 0 && (
                         <div>
-                           <span className="text-xs text-muted-foreground block mb-1">Items</span>
-                           <div className="space-y-2">
-                             {selectedBill.items.map((item: any, i: number) => (
-                               <div key={i} className="flex justify-between items-start text-xs border border-border/30 p-2 rounded bg-muted/10">
-                                 <div>
-                                   <div className="font-medium text-foreground">{item.service}</div>
-                                   {item.deliverables && <div className="text-muted-foreground mt-0.5 line-clamp-2" title={item.deliverables}>{item.deliverables}</div>}
-                                 </div>
-                                 <div className="font-medium whitespace-nowrap pl-2 text-primary">₹{item.price}</div>
-                               </div>
-                             ))}
-                           </div>
+                          <span className="text-xs text-muted-foreground block mb-1">Items</span>
+                          <div className="space-y-2">
+                            {selectedBill.items.map((item: any, i: number) => {
+                              const p = Number(item.price) || 0;
+                              const q = Number(item.quantity) || 1;
+                              const amt = Number(item.amount) || (p * q);
+                              return (
+                                <div key={i} className="flex justify-between items-start text-xs border border-border/30 p-2 rounded bg-muted/10">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="font-medium text-foreground truncate">{item.service}</div>
+                                    {item.deliverables && <div className="text-muted-foreground mt-0.5 line-clamp-2" title={item.deliverables}>{item.deliverables}</div>}
+                                  </div>
+                                  <div className="text-right pl-3 flex-shrink-0">
+                                    <div className="font-mono text-[10px] text-muted-foreground">
+                                      ₹{p.toLocaleString('en-IN')} × {q}
+                                    </div>
+                                    <div className="font-semibold text-primary">
+                                      ₹{amt.toLocaleString('en-IN')}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
                       )}
                     </>
@@ -942,6 +1056,14 @@ export default function Bills() {
                   <Input type="date" value={createForm.dueDate} onChange={e => setCreateForm((p: any) => ({ ...p, dueDate: e.target.value }))} className="h-8 text-sm" />
                 </div>
                 <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Venue</label>
+                  <Input value={createForm.venue} onChange={e => setCreateForm((p: any) => ({ ...p, venue: e.target.value }))} placeholder="e.g. Grand Hyatt" className="h-8 text-sm" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Guest Count</label>
+                  <Input value={createForm.guestCount} onChange={e => setCreateForm((p: any) => ({ ...p, guestCount: e.target.value }))} placeholder="e.g. 500" className="h-8 text-sm" />
+                </div>
+                <div className="space-y-1">
                   <label className="text-xs text-muted-foreground">Status</label>
                   <select value={createForm.status} onChange={e => setCreateForm((p: any) => ({ ...p, status: e.target.value }))} className="flex h-8 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
                     <option value="Unpaid">Unpaid</option>
@@ -961,7 +1083,7 @@ export default function Bills() {
                 <Button
                   type="button" variant="ghost" size="sm"
                   className="h-7 px-2 text-xs text-primary hover:bg-primary/10 gap-1"
-                  onClick={() => setCreateForm((p: any) => ({ ...p, items: [...p.items, { service: '', deliverables: '', price: '' }] }))}
+                  onClick={() => setCreateForm((p: any) => ({ ...p, items: [...p.items, { service: '', deliverables: '', price: '', quantity: 1 }] }))}
                 >
                   <PlusCircle className="h-3.5 w-3.5" />
                   Add Item
@@ -970,26 +1092,36 @@ export default function Bills() {
 
               <div className="space-y-2">
                 {/* Column headers */}
-                <div className="grid grid-cols-[1fr_2fr_90px_32px] gap-2 px-1">
-                  <span className="text-[10px] font-medium text-muted-foreground uppercase">Service Name</span>
-                  <span className="text-[10px] font-medium text-muted-foreground uppercase">Description / Deliverables</span>
-                  <span className="text-[10px] font-medium text-muted-foreground uppercase">Price (₹)</span>
+                <div className="grid grid-cols-[1fr_1.5fr_70px_80px_100px_32px] gap-2 px-1">
+                  <span className="text-[10px] font-medium text-muted-foreground uppercase">Service</span>
+                  <span className="text-[10px] font-medium text-muted-foreground uppercase">Description</span>
+                  <span className="text-[10px] font-medium text-muted-foreground uppercase">Qty</span>
+                  <span className="text-[10px] font-medium text-muted-foreground uppercase">Price</span>
+                  <span className="text-[10px] font-medium text-muted-foreground uppercase text-right">Amount</span>
                   <span></span>
                 </div>
 
                 {createForm.items.map((item: any, idx: number) => (
-                  <div key={idx} className="grid grid-cols-[1fr_2fr_90px_32px] gap-2 items-start group">
+                  <div key={idx} className="grid grid-cols-[1fr_1.5fr_70px_80px_100px_32px] gap-2 items-start group">
                     <Input
                       value={item.service}
                       onChange={e => setCreateForm((p: any) => { const items = [...p.items]; items[idx] = { ...items[idx], service: e.target.value }; return { ...p, items }; })}
-                      placeholder="e.g. Photography"
-                      className="h-8 text-sm"
+                      placeholder="Photography"
+                      className="h-8 text-xs"
                     />
                     <Textarea
                       value={item.deliverables}
                       onChange={e => setCreateForm((p: any) => { const items = [...p.items]; items[idx] = { ...items[idx], deliverables: e.target.value }; return { ...p, items }; })}
-                      placeholder="Deliverables or description..."
-                      className="min-h-[32px] h-8 text-sm resize-none py-1.5"
+                      placeholder="Notes..."
+                      className="min-h-[32px] h-8 text-xs resize-none py-1.5"
+                    />
+                    <Input
+                      type="number"
+                      value={item.quantity}
+                      onChange={e => setCreateForm((p: any) => { const items = [...p.items]; items[idx] = { ...items[idx], quantity: e.target.value }; return { ...p, items }; })}
+                      placeholder="1"
+                      min="1"
+                      className="h-8 text-xs"
                     />
                     <Input
                       type="number"
@@ -997,8 +1129,11 @@ export default function Bills() {
                       onChange={e => setCreateForm((p: any) => { const items = [...p.items]; items[idx] = { ...items[idx], price: e.target.value }; return { ...p, items }; })}
                       placeholder="0"
                       min="0"
-                      className="h-8 text-sm"
+                      className="h-8 text-xs"
                     />
+                    <div className="h-8 flex items-center justify-end text-xs font-semibold pr-1">
+                      ₹{((parseNumber(item.price) || 0) * (Number(item.quantity) || 1)).toLocaleString('en-IN')}
+                    </div>
                     <Button
                       type="button" variant="ghost" size="icon"
                       className="h-8 w-8 text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -1067,6 +1202,24 @@ export default function Bills() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the {deleteTarget?.type} 
+              and remove its data from our servers.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

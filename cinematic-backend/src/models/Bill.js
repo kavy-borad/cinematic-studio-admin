@@ -43,6 +43,14 @@ const Bill = sequelize.define(
             type: DataTypes.DATEONLY,
             allowNull: true,
         },
+        venue: {
+            type: DataTypes.STRING,
+            allowNull: true,
+        },
+        guestCount: {
+            type: DataTypes.STRING,
+            allowNull: true,
+        },
         items: {
             type: DataTypes.JSON,
             allowNull: false,

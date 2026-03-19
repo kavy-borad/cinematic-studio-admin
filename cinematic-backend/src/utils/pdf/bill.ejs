@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Invoice – <%= invoiceNumber %></title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* ── Page Setup ── */
+        @page {
+            size: A4;
+            margin: 0;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #ffffff;
+            color: #111827;
+            font-size: 11px;
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container {
+            width: 210mm;
+            max-width: 210mm;
+            min-height: 297mm;
+            margin: 0 auto;
+            padding: 50px 60px;
+            background: #ffffff;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ── Header ── */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 40px;
+            border-bottom: 2px solid #f3f4f6;
+            padding-bottom: 30px;
+        }
+
+        .company-info .company-name {
+            font-family: 'Playfair Display', serif;
+            font-size: 28px;
+            font-weight: 700;
+            color: #b59048;
+            letter-spacing: 1px;
+            margin-bottom: 4px;
+        }
+
+        .company-info .company-tagline {
+            font-size: 10px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: #6b7280;
+            margin-bottom: 12px;
+        }
+
+        .company-info .company-contact {
+            font-size: 10px;
+            color: #4b5563;
+        }
+
+        .invoice-details {
+            text-align: right;
+        }
+
+        .invoice-details h1 {
+            font-size: 36px;
+            font-weight: 700;
+            color: #111827;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 15px;
+            line-height: 1;
+        }
+
+        .meta-grid {
+            display: grid;
+            grid-template-columns: auto auto;
+            gap: 6px 20px;
+            text-align: right;
+            font-size: 11px;
+        }
+
+        .meta-label { color: #6b7280; font-weight: 500; }
+        .meta-value { color: #111827; font-weight: 600; }
+
+        /* ── Billing Details ── */
+        .billing-section {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 40px;
+        }
+
+        .billing-block.left {
+            width: 48%;
+        }
+
+        .billing-block.right {
+            width: 48%;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+        }
+
+        .inner-details {
+            width: 220px;
+        }
+
+        .section-label {
+            font-size: 10px;
+            font-weight: 700;
+            color: #9ca3af;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+
+        .client-name {
+            font-size: 16px;
+            font-weight: 700;
+            color: #111827;
+            margin-bottom: 6px;
+        }
+
+        .client-details-row {
+            display: flex;
+            margin-bottom: 4px;
+            font-size: 11px;
+        }
+
+        .client-details-label {
+            width: 85px;
+            color: #6b7280;
+            font-weight: 500;
+        }
+
+        .client-details-val {
+            flex: 1;
+            color: #111827;
+        }
+
+        /* ── Table ── */
+        .table-container {
+            margin-bottom: 30px;
+            flex-grow: 1;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+
+        thead th {
+            background: #f8f6f0;
+            padding: 12px 15px;
+            font-size: 10px;
+            font-weight: 700;
+            color: #b59048;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            text-align: left;
+            border-bottom: 2px solid #b59048;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        tbody td {
+            padding: 16px 15px;
+            border-bottom: 1px solid #e5e7eb;
+            vertical-align: top;
+            font-size: 11px;
+            color: #374151;
+        }
+
+        /* Column widths & alignment */
+        .col-sr { width: 5%; text-align: center; }
+        .col-service { width: 45%; }
+        .col-qty { width: 10%; text-align: center; }
+        .col-price { width: 20%; text-align: right; }
+        .col-amount { width: 20%; text-align: right; font-weight: 600; color: #111827; }
+
+        .service-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: #111827;
+            margin-bottom: 4px;
+        }
+
+        .service-desc {
+            font-size: 10px;
+            color: #6b7280;
+            line-height: 1.5;
+        }
+
+        .service-desc ul {
+            list-style: none;
+        }
+
+        .service-desc li {
+            position: relative;
+            padding-left: 10px;
+            margin-bottom: 2px;
+        }
+
+        .service-desc li::before {
+            content: "•";
+            position: absolute;
+            left: 0;
+            color: #9ca3af;
+        }
+
+        /* ── Summary & Payment Section ── */
+        .summary-payment-wrap {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            page-break-inside: avoid;
+        }
+
+        .payment-info {
+            width: 48%;
+            padding: 20px;
+            background: #f9fafb;
+            border-radius: 8px;
+            border: 1px solid #f3f4f6;
+        }
+
+        .payment-grid {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 6px 15px;
+            font-size: 11px;
+        }
+
+        .payment-label { color: #6b7280; font-weight: 500; }
+        .payment-val { color: #111827; font-weight: 600; }
+
+        .notes-section {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #e5e7eb;
+            font-size: 10px;
+            color: #6b7280;
+        }
+
+        .summary-box {
+            width: 40%;
+        }
+
+        .summary-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            font-size: 12px;
+            color: #4b5563;
+        }
+
+        .summary-row.tax {
+            color: #6b7280;
+        }
+
+        .summary-row.advance {
+            color: #059669; /* emerald-600 */
+        }
+
+        .summary-row.total-row {
+            margin-top: 10px;
+            padding: 12px 15px;
+            background: #f9fafb;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 700;
+            color: #111827;
+            border: 1px solid #f3f4f6;
+        }
+
+        .summary-row.balance-row {
+            margin-top: 8px;
+            padding: 12px 15px;
+            background: #eff6ff; /* blue-50 */
+            color: #1d4ed8; /* blue-700 */
+            font-weight: 700;
+            border-radius: 6px;
+            font-size: 14px;
+            border: 1px solid #bfdbfe;
+        }
+
+        /* ── Signature Section ── */
+        .signature-section {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 50px;
+            margin-bottom: 20px;
+            page-break-inside: avoid;
+        }
+
+        .sig-block {
+            width: 200px;
+            text-align: center;
+        }
+
+        .sig-line {
+            border-top: 1px solid #d1d5db;
+            padding-top: 8px;
+            font-weight: 600;
+            font-size: 11px;
+            color: #4b5563;
+        }
+
+        /* ── Footer ── */
+        .footer {
+            margin-top: auto;
+            padding-top: 20px;
+            border-top: 1px solid #f3f4f6;
+            text-align: center;
+        }
+
+        .footer-thanks {
+            font-size: 13px;
+            font-weight: 600;
+            color: #111827;
+            margin-bottom: 6px;
+        }
+
+        .footer-info {
+            font-size: 10px;
+            color: #9ca3af;
+        }
+
+        /* Helpers */
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <!-- Header -->
+    <header class="header">
+        <div class="company-info">
+            <div class="company-name">Aura Cinematic Weddings</div>
+            <div class="company-tagline">Cinematic Weddings</div>
+            <div class="company-contact">
+                +91 080 234 5789 | www.auraweddings.com<br>
+                hello@auraweddings.com
+            </div>
+        </div>
+        
+        <div class="invoice-details">
+            <h1>INVOICE</h1>
+            <div class="meta-grid">
+                <span class="meta-label">Invoice Number:</span>
+                <span class="meta-value"><%= invoiceNumber %></span>
+                
+                <span class="meta-label">Invoice Date:</span>
+                <span class="meta-value"><%= issueDate %></span>
+                
+                <% if (dueDate) { %>
+                <span class="meta-label">Due Date:</span>
+                <span class="meta-value"><%= dueDate %></span>
+                <% } %>
+            </div>
+        </div>
+    </header>
+
+    <!-- Billing Section -->
+    <div class="billing-section">
+        <div class="billing-block left">
+            <div class="section-label">Bill To</div>
+            <div class="client-name"><%= client.name %></div>
+            
+            <% if (client.phone) { %>
+            <div class="client-details-row">
+                <span class="client-details-label">Phone:</span>
+                <span class="client-details-val"><%= client.phone %></span>
+            </div>
+            <% } %>
+            
+            <% if (client.email) { %>
+            <div class="client-details-row">
+                <span class="client-details-label">Email:</span>
+                <span class="client-details-val"><%= client.email %></span>
+            </div>
+            <% } %>
+
+            <% if (client.address) { %>
+            <div class="client-details-row">
+                <span class="client-details-label">Address:</span>
+                <span class="client-details-val"><%= client.address %></span>
+            </div>
+            <% } %>
+        </div>
+        
+        <div class="billing-block right">
+            <div class="inner-details">
+                <div class="section-label">Event Details</div>
+                
+                <div class="client-details-row">
+                    <span class="client-details-label">Event Type:</span>
+                    <span class="client-details-val"><%= event.type || 'Cinematic Event' %></span>
+                </div>
+                
+                <% if (event.date) { %>
+                <div class="client-details-row">
+                    <span class="client-details-label">Event Date:</span>
+                    <span class="client-details-val"><%= event.date %></span>
+                </div>
+                <% } %>
+                
+                <% if (event.venue) { %>
+                <div class="client-details-row">
+                    <span class="client-details-label">Venue:</span>
+                    <span class="client-details-val"><%= event.venue %></span>
+                </div>
+                <% } %>
+                
+                <% if (event.guestCount) { %>
+                <div class="client-details-row">
+                    <span class="client-details-label">Guest Count:</span>
+                    <span class="client-details-val"><%= event.guestCount %></span>
+                </div>
+                <% } %>
+            </div>
+        </div>
+    </div>
+
+    <!-- Table Section -->
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th class="col-sr">#</th>
+                    <th class="col-service">Item & Description</th>
+                    <th class="col-qty">Qty</th>
+                    <th class="col-price">Price</th>
+                    <th class="col-amount">Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                <% if (items && items.length > 0) { %>
+                    <% items.forEach(function(item, idx) { %>
+                    <tr>
+                        <td class="col-sr"><%= idx + 1 %></td>
+                        <td class="col-service">
+                            <div class="service-title"><%= item.service %></div>
+                            <% if (item.deliverables) { %>
+                                <div class="service-desc">
+                                    <% var lines = item.deliverables.split('\n').map(function(l){ return l.trim(); }).filter(function(l){ return l.length > 0; }); %>
+                                    <% if (lines.length > 1) { %>
+                                        <ul>
+                                            <% lines.forEach(function(line) { %>
+                                                <li><%= line.replace(/^[-•*]\s*/, '') %></li>
+                                            <% }); %>
+                                        </ul>
+                                    <% } else { %>
+                                        <%= item.deliverables %>
+                                    <% } %>
+                                </div>
+                            <% } %>
+                        </td>
+                        <% var parsedPrice = Number(String(item.price || '').replace(/,/g, '').trim()); %>
+                        <% var parsedAmount = Number(String(item.amount || '').replace(/,/g, '').trim()); %>
+                        <% var quantity = Number(String(item.quantity || '1').replace(/,/g, '').trim()) || 1; %>
+                        <% var finalPrice = Number.isFinite(parsedPrice) ? parsedPrice : 0; %>
+                        <% var finalAmount = Number.isFinite(parsedAmount) && parsedAmount > 0 ? parsedAmount : (finalPrice * quantity); %>
+                        <td class="col-qty text-center"><%= quantity %></td>
+                        <td class="col-price text-right">₹<%= finalPrice.toLocaleString('en-IN') %></td>
+                        <td class="col-amount text-right">₹<%= finalAmount.toLocaleString('en-IN') %></td>
+                    </tr>
+                    <% }); %>
+                <% } else { %>
+                    <tr>
+                        <td colspan="5" class="text-center" style="padding: 40px; color: #9ca3af; font-size: 12px;">No items found.</td>
+                    </tr>
+                <% } %>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Summary & Payment Info -->
+    <div class="summary-payment-wrap">
+        <div class="payment-info">
+            <div class="section-label">Payment Information</div>
+            <div class="payment-grid">
+                <span class="payment-label">Method:</span>
+                <span class="payment-val">Bank Transfer / UPI</span>
+                
+                <span class="payment-label">Account Name:</span>
+                <span class="payment-val">Aura Cinematic Weddings</span>
+                
+                <span class="payment-label">Bank Name:</span>
+                <span class="payment-val">HDFC Bank</span>
+                
+                <span class="payment-label">Account Number:</span>
+                <span class="payment-val">XXXXXXXXXXXX</span>
+                
+                <span class="payment-label">IFSC Code:</span>
+                <span class="payment-val">HDFC0001234</span>
+                
+                <span class="payment-label">UPI ID:</span>
+                <span class="payment-val">aura@upi</span>
+            </div>
+            
+            <% if (notes) { %>
+            <div class="notes-section">
+                <strong>Notes:</strong> <%= notes %>
+            </div>
+            <% } %>
+        </div>
+
+        <div class="summary-box">
+            <div class="summary-row">
+                <span>Subtotal</span>
+                <span style="font-weight: 500; color: #111827;">₹<%= Number(subtotal).toLocaleString('en-IN') %></span>
+            </div>
+            <div class="summary-row tax">
+                <span>GST (<%= gstRate %>%)</span>
+                <span>₹<%= Number(taxAmount).toLocaleString('en-IN') %></span>
+            </div>
+            
+            <div class="summary-row total-row">
+                <span>Total Amount</span>
+                <span>₹<%= Number(totalAmount).toLocaleString('en-IN') %></span>
+            </div>
+
+            <% if (advancePaid > 0) { %>
+            <div class="summary-row advance" style="margin-top: 8px; padding: 0 15px;">
+                <span>Advance Paid</span>
+                <span style="font-weight: 600;">- ₹<%= Number(advancePaid).toLocaleString('en-IN') %></span>
+            </div>
+            <% } %>
+
+            <% if (balanceAmount > 0 && advancePaid > 0) { %>
+            <div class="summary-row balance-row">
+                <span>Balance Due</span>
+                <span>₹<%= Number(balanceAmount).toLocaleString('en-IN') %></span>
+            </div>
+            <% } %>
+        </div>
+    </div>
+
+    <!-- Signature -->
+    <div class="signature-section">
+        <div class="sig-block">
+            <div style="height: 50px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 10px;">
+                <span style="font-family: 'Playfair Display', serif; font-style: italic; font-weight: 700; color: #b59048; font-size: 24px;">Aura</span>
+            </div>
+            <div class="sig-line">Authorized Signature</div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-thanks">Thank you for your business.</div>
+        <div class="footer-info">Generated electronically. This document does not require a physical signature.</div>
+    </footer>
+</div>
+</body>
+</html>

@@ -185,10 +185,18 @@ exports.createQuotation = async (req, res) => {
 // GET /api/quotations (Admin)
 exports.getAllQuotations = async (req, res) => {
     try {
-        const { status } = req.query;
+        const { status, search } = req.query;
+        const { Op } = require("sequelize");
         const where = {};
+        
         if (status && status !== "All") {
             where.status = status;
+        }
+
+        if (search && search.trim() !== "") {
+            where.name = {
+                [Op.like]: `%${search.trim()}%`
+            };
         }
 
         const quotations = await Quotation.findAll({ where, order: [["createdAt", "DESC"]] });

@@ -1,7 +1,7 @@
 const ApiLog = require("../models/ApiLog");
 
 // List of routes to skip logging (avoid logging the log viewer itself)
-const SKIP_PATHS = ["/api/logs", "/log-viewer", "/uploads", "/favicon.ico"];
+const SKIP_PATHS = ["/api/logs", "/log-viewer", "/uploads", "/favicon.ico", "/pdf"];
 
 const apiLogger = (req, res, next) => {
     // Skip log-viewer and logs API routes
@@ -16,6 +16,14 @@ const apiLogger = (req, res, next) => {
     let capturedResponseSize = 0;
 
     res.send = function (body) {
+        // Skip capturing large binary data (like PDFs)
+        const contentType = res.get('Content-Type');
+        if (contentType && contentType.includes('application/pdf')) {
+            capturedResponseBody = "[Binary PDF Data]";
+            capturedResponseSize = body ? body.length : 0;
+            return originalSend.call(this, body);
+        }
+
         // Try to parse JSON response body
         if (body) {
             capturedResponseSize = typeof body === "string" ? Buffer.byteLength(body) : 0;
