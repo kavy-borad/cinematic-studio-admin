@@ -188,7 +188,7 @@ exports.getAllQuotations = async (req, res) => {
         const { status, search } = req.query;
         const { Op } = require("sequelize");
         const where = {};
-        
+
         if (status && status !== "All") {
             where.status = status;
         }
@@ -441,7 +441,7 @@ exports.downloadQuotationPDF = async (req, res) => {
             if (Array.isArray(srvs) && srvs.length > 0) {
                 srvs.forEach(s => {
                     let deliverableText = getDefaultDeliverables(s);
-                    
+
                     if (customReqs[s] && customReqs[s].trim() !== '') {
                         deliverableText = customReqs[s].split('\n').map(l => l.trim()).filter(l => l !== '');
                     }

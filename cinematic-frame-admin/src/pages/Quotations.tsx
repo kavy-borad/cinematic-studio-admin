@@ -152,8 +152,8 @@ export default function Quotations() {
         </div>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input 
-            placeholder="Search by client name..." 
+          <Input
+            placeholder="Search by client name..."
             className="pl-9 w-64 bg-muted/50 border-border/50 text-sm focus:ring-1"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -281,7 +281,7 @@ export default function Quotations() {
                       <div className="grid grid-cols-3 gap-2 items-center"><span className="text-xs text-muted-foreground">Venue</span><Input name="venue" value={editForm.venue || ""} onChange={handleEditChange} className="col-span-2 h-7 text-sm" /></div>
                       <div className="grid grid-cols-3 gap-2 items-center"><span className="text-xs text-muted-foreground">Guest Count</span><Input name="guestCount" value={editForm.guestCount || ""} onChange={handleEditChange} className="col-span-2 h-7 text-sm" /></div>
                       <div className="grid grid-cols-3 gap-2 items-center"><span className="text-xs text-muted-foreground items-start pt-1">Functions</span><Textarea name="functions" value={editForm.functions || ""} onChange={handleEditChange} className="col-span-2 text-sm min-h-[60px]" /></div>
-                      
+
                       {(() => {
                         // Parse current services & descriptions from editForm
                         let srvs: string[] = [];
@@ -431,59 +431,59 @@ export default function Quotations() {
                         <div className="py-2 my-2 border-y border-border/50 space-y-2">
                           {selected.functions && (
                             <div>
-                                <span className="text-xs text-muted-foreground block mb-1">Functions</span>
-                                <span className="text-sm">{selected.functions}</span>
+                              <span className="text-xs text-muted-foreground block mb-1">Functions</span>
+                              <span className="text-sm">{selected.functions}</span>
                             </div>
                           )}
                           {selected.servicesRequested && (Array.isArray(selected.servicesRequested) ? selected.servicesRequested.length > 0 : String(selected.servicesRequested).length > 0) && (
                             <div>
-                                <span className="text-xs text-muted-foreground block mb-1">Services Requested</span>
-                                <div className="flex flex-wrap gap-1">
-                                    {(() => {
-                                    let viewSrvs: string[] = [];
-                                    if (Array.isArray(selected.servicesRequested)) {
-                                        viewSrvs = selected.servicesRequested;
-                                    } else if (typeof selected.servicesRequested === 'string') {
-                                        try {
-                                        if (selected.servicesRequested.startsWith('[')) {
-                                            viewSrvs = JSON.parse(selected.servicesRequested);
-                                        } else {
-                                            viewSrvs = selected.servicesRequested.split(',').map((s: string) => s.trim());
-                                        }
-                                        } catch (e) {
+                              <span className="text-xs text-muted-foreground block mb-1">Services Requested</span>
+                              <div className="flex flex-wrap gap-1">
+                                {(() => {
+                                  let viewSrvs: string[] = [];
+                                  if (Array.isArray(selected.servicesRequested)) {
+                                    viewSrvs = selected.servicesRequested;
+                                  } else if (typeof selected.servicesRequested === 'string') {
+                                    try {
+                                      if (selected.servicesRequested.startsWith('[')) {
+                                        viewSrvs = JSON.parse(selected.servicesRequested);
+                                      } else {
                                         viewSrvs = selected.servicesRequested.split(',').map((s: string) => s.trim());
-                                        }
+                                      }
+                                    } catch (e) {
+                                      viewSrvs = selected.servicesRequested.split(',').map((s: string) => s.trim());
                                     }
-                                    return viewSrvs.map((srv, i) => <Badge key={i} variant="secondary" className="text-[10px] px-1.5 py-0 h-5 font-normal">{srv}</Badge>);
-                                    })()}
-                                </div>
+                                  }
+                                  return viewSrvs.map((srv, i) => <Badge key={i} variant="secondary" className="text-[10px] px-1.5 py-0 h-5 font-normal">{srv}</Badge>);
+                                })()}
+                              </div>
                             </div>
                           )}
 
                           {selected.requirements && (
                             <div className="pt-2 border-t border-border/50 mt-2">
-                                <span className="text-xs text-muted-foreground block mb-2">Service Descriptions</span>
-                                <div className="space-y-3 bg-muted/10 p-3 rounded-md border border-border/30">
+                              <span className="text-xs text-muted-foreground block mb-2">Service Descriptions</span>
+                              <div className="space-y-3 bg-muted/10 p-3 rounded-md border border-border/30">
                                 {(() => {
-                                    try {
+                                  try {
                                     if (selected.requirements.startsWith('{')) {
-                                        const reqs = JSON.parse(selected.requirements);
-                                        const entries = Object.entries(reqs).filter(([_, desc]) => Boolean(desc));
-                                        if (entries.length === 0) return <span className="text-xs text-muted-foreground">No descriptions added</span>;
-                                        return entries.map(([srv, desc]: any, i) => (
+                                      const reqs = JSON.parse(selected.requirements);
+                                      const entries = Object.entries(reqs).filter(([_, desc]) => Boolean(desc));
+                                      if (entries.length === 0) return <span className="text-xs text-muted-foreground">No descriptions added</span>;
+                                      return entries.map(([srv, desc]: any, i) => (
                                         <div key={i} className="grid grid-cols-3 gap-2 items-start py-1">
-                                            <span className="font-semibold text-xs text-foreground text-right pr-2">{srv}</span>
-                                            <div className="col-span-2 whitespace-pre-wrap text-muted-foreground text-sm">{desc}</div>
+                                          <span className="font-semibold text-xs text-foreground text-right pr-2">{srv}</span>
+                                          <div className="col-span-2 whitespace-pre-wrap text-muted-foreground text-sm">{desc}</div>
                                         </div>
-                                        ));
+                                      ));
                                     } else {
-                                        return <span className="text-sm whitespace-pre-wrap">{selected.requirements}</span>;
+                                      return <span className="text-sm whitespace-pre-wrap">{selected.requirements}</span>;
                                     }
-                                    } catch (e) {
+                                  } catch (e) {
                                     return <span className="text-sm whitespace-pre-wrap">{selected.requirements}</span>;
-                                    }
+                                  }
                                 })()}
-                                </div>
+                              </div>
                             </div>
                           )}
                         </div>
